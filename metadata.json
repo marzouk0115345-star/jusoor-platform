@@ -1,0 +1,6 @@
+{
+  "name": "جسور | JUSOOR",
+  "description": "منصة جسور التعليمية والمهنية المتكاملة — جسور تربطك بالتعلّم والفرص، دورات، مهام تعليمية، استشارات، ومراكز تدريب.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
