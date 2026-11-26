@@ -50,6 +50,7 @@ import {
   teacherAvailability,
 } from '../db/schema.ts';
 import { ensureEgyptianCurriculumSeeded } from './curriculumSeed.ts';
+import { ensureAllTeacherAssignmentSessionsSeeded } from './sessionsSeed.ts';
 
 let seedPromise: Promise<void> | null = null;
 
@@ -67,6 +68,14 @@ async function runSeed(): Promise<void> {
   if (existingRoles.length > 0) {
     await ensureLessonSessionsSeeded();
     await ensureEgyptianCurriculumSeeded();
+    const existingSeededAssignments = await db
+      .select({ id: teachingSessions.id })
+      .from(teachingSessions)
+      .where(eq(teachingSessions.isDemoLocation, true))
+      .limit(1);
+    if (existingSeededAssignments.length === 0) {
+      await ensureAllTeacherAssignmentSessionsSeeded();
+    }
     return;
   }
 
@@ -741,6 +750,7 @@ async function runSeed(): Promise<void> {
 
   await ensureLessonSessionsSeeded();
   await ensureEgyptianCurriculumSeeded();
+  await ensureAllTeacherAssignmentSessionsSeeded();
 }
 
 async function ensureLessonSessionsSeeded(): Promise<void> {

@@ -203,7 +203,71 @@ export type SessionEnrollmentStatus =
   | 'ACCEPTED'
   | 'REJECTED'
   | 'CANCELLED';
-export type DeliveryMode = 'ONLINE' | 'IN_PERSON';
+export type DeliveryMode = 'ONLINE' | 'IN_PERSON' | 'OFFLINE';
+export type CanonicalDeliveryMode = 'ONLINE' | 'IN_PERSON';
+export type IndividualSlotStatus =
+  | 'AVAILABLE'
+  | 'PENDING'
+  | 'BOOKED'
+  | 'UNAVAILABLE';
+
+export function normalizeDeliveryMode(
+  mode?: string | null
+): CanonicalDeliveryMode {
+  if (mode === 'IN_PERSON' || mode === 'OFFLINE') return 'IN_PERSON';
+  return 'ONLINE';
+}
+
+export function isOfflineDeliveryMode(mode?: string | null): boolean {
+  return mode === 'IN_PERSON' || mode === 'OFFLINE';
+}
+
+export interface OfflineAddressParts {
+  governorate?: string | null;
+  city?: string | null;
+  district?: string | null;
+  streetName?: string | null;
+  buildingOrCenterName?: string | null;
+  locationNotes?: string | null;
+  location?: string | null;
+}
+
+export function formatOfflineAddress(parts: OfflineAddressParts): string {
+  const structured = [
+    parts.buildingOrCenterName?.trim(),
+    parts.streetName?.trim(),
+    parts.district?.trim(),
+    parts.city?.trim(),
+    parts.governorate?.trim(),
+  ].filter((v): v is string => Boolean(v));
+  if (structured.length > 0) {
+    const base = structured.join('، ');
+    return parts.locationNotes?.trim()
+      ? `${base} — ${parts.locationNotes.trim()}`
+      : base;
+  }
+  return parts.location?.trim() || '';
+}
+
+export function formatCurrencyPrice(
+  price: number | string,
+  currency: string = 'EGP',
+  locale: 'ar' | 'en' = 'ar'
+): string {
+  const num = Number(price);
+  if (!Number.isFinite(num) || num === 0) {
+    return locale === 'ar' ? 'مجانية' : 'Free';
+  }
+  const formatted = Number.isInteger(num) ? String(num) : num.toFixed(2);
+  const code = (currency || 'EGP').toUpperCase();
+  if (code === 'EGP') {
+    return locale === 'ar' ? `${formatted} ج.م` : `${formatted} EGP`;
+  }
+  if (code === 'USD') {
+    return `$${formatted}`;
+  }
+  return `${formatted} ${code}`;
+}
 
 function toTimestampMs(value: Date | string): number {
   return value instanceof Date ? value.getTime() : new Date(value).getTime();
@@ -294,6 +358,37 @@ export function computeSessionAvailability(params: {
   };
 }
 
+export function computeIndividualSlotStatus(params: {
+  sessionType: SessionType;
+  status: SessionStatus;
+  acceptedCount: number;
+  pendingCount: number;
+  startTime: Date | string;
+  registrationDeadline?: Date | string | null;
+  now?: Date | string;
+}): IndividualSlotStatus | null {
+  if (params.sessionType !== 'ONE_TO_ONE') return null;
+  if (params.status === 'CANCELLED' || params.status === 'COMPLETED') {
+    return 'UNAVAILABLE';
+  }
+  const nowMs = params.now ? toTimestampMs(params.now) : Date.now();
+  const startMs = toTimestampMs(params.startTime);
+  const deadlineMs = params.registrationDeadline
+    ? toTimestampMs(params.registrationDeadline)
+    : startMs;
+
+  if (params.acceptedCount >= 1 || params.status === 'FULL') {
+    return 'BOOKED';
+  }
+  if (nowMs >= startMs || nowMs > deadlineMs) {
+    return 'UNAVAILABLE';
+  }
+  if (params.pendingCount > 0) {
+    return 'PENDING';
+  }
+  return 'AVAILABLE';
+}
+
 export function validateSessionSchedule(input: {
   sessionType: SessionType;
   startTime: Date | string;
@@ -303,6 +398,11 @@ export function validateSessionSchedule(input: {
   registrationDeadline?: Date | string | null;
   deliveryMode: DeliveryMode;
   location?: string | null;
+  governorate?: string | null;
+  city?: string | null;
+  district?: string | null;
+  streetName?: string | null;
+  buildingOrCenterName?: string | null;
   meetingUrl?: string | null;
   price: number;
   now?: Date | string;
@@ -355,8 +455,11 @@ export function validateSessionSchedule(input: {
     }
   }
 
-  if (input.deliveryMode === 'IN_PERSON' && !input.location?.trim()) {
-    return 'يرجى تحديد الموقع للجلسات الحضورية.';
+  if (isOfflineDeliveryMode(input.deliveryMode)) {
+    const resolvedLocation = formatOfflineAddress(input);
+    if (!resolvedLocation) {
+      return 'يرجى تحديد العنوان التفصيلي للجلسات الحضورية (الأوفلاين).';
+    }
   }
 
   return null;
@@ -577,7 +680,7 @@ export function filterAndSortDiscoveredTeachers<T extends DiscoverableTeacherEnt
   teachers: T[],
   options: {
     q?: string;
-    deliveryMode?: 'ONLINE' | 'IN_PERSON' | '';
+    deliveryMode?: 'ONLINE' | 'IN_PERSON' | 'OFFLINE' | '';
     language?: string;
     hasSessionsOnly?: boolean;
     sort?: 'rating' | 'price_asc' | 'price_desc' | 'experience' | 'sessions';
@@ -592,7 +695,7 @@ export function filterAndSortDiscoveredTeachers<T extends DiscoverableTeacherEnt
       if (!hay.includes(q)) return false;
     }
     if (options.deliveryMode === 'ONLINE' && !t.supportsOnline) return false;
-    if (options.deliveryMode === 'IN_PERSON' && !t.supportsInPerson) return false;
+    if (isOfflineDeliveryMode(options.deliveryMode) && !t.supportsInPerson) return false;
     if (
       lang &&
       !t.languagesOffered.some((l) => l.toLowerCase() === lang)

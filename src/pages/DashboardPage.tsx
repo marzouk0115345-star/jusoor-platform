@@ -20,7 +20,10 @@ import {
   TASK_STATUS_LABELS_AR,
   SESSION_TYPE_LABELS_AR,
   ENROLLMENT_STATUS_LABELS_AR,
+  DELIVERY_MODE_LABELS_AR,
   formatSessionDateRange,
+  formatCurrencyPrice,
+  isOfflineDeliveryMode,
 } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { TeacherSessionManager } from '../components/TeacherSessionManager';
@@ -59,12 +62,21 @@ interface DashboardPayload {
     sessionType: 'ONE_TO_ONE' | 'GROUP';
     startTime: string;
     endTime: string;
+    durationMinutes?: number;
+    price?: string;
+    currency?: string;
     deliveryMode: 'ONLINE' | 'IN_PERSON';
     location: string | null;
+    isDemoLocation?: boolean;
     meetingUrl: string | null;
     sessionStatus: string;
     enrollmentStatus: 'PENDING' | 'ACCEPTED' | 'REJECTED' | 'CANCELLED';
+    notes?: string | null;
+    teacherUserId?: number;
     teacherName: string;
+    subjectNameAr?: string | null;
+    gradeNameAr?: string | null;
+    systemNameAr?: string | null;
   }>;
   teachingSessionsSummary?: {
     totalSessions: number;
@@ -101,6 +113,18 @@ export function DashboardPage() {
   const [data, setData] = useState<DashboardPayload | null>(null);
   const [loading, setLoading] = useState(false);
   const [actionMsg, setActionMsg] = useState<string | null>(null);
+  const [lessonFilter, setLessonFilter] = useState<
+    | 'ALL'
+    | 'INDIVIDUAL'
+    | 'ACCEPTED_1ON1'
+    | 'PENDING'
+    | 'REJECTED'
+    | 'ONLINE_GROUP'
+    | 'OFFLINE_GROUP'
+    | 'UPCOMING'
+    | 'COMPLETED'
+    | 'CANCELLED'
+  >('ALL');
 
   const loadDashboard = useCallback(async () => {
     if (!user) return;
@@ -165,6 +189,41 @@ export function DashboardPage() {
       l.sessionStatus !== 'CANCELLED' &&
       l.sessionStatus !== 'COMPLETED'
   );
+  const filteredLessonEnrollments = lessonEnrollments.filter((l) => {
+    const nowMs = Date.now();
+    const isOffline = isOfflineDeliveryMode(l.deliveryMode);
+    switch (lessonFilter) {
+      case 'INDIVIDUAL':
+        return l.sessionType === 'ONE_TO_ONE';
+      case 'ACCEPTED_1ON1':
+        return l.sessionType === 'ONE_TO_ONE' && l.enrollmentStatus === 'ACCEPTED';
+      case 'PENDING':
+        return l.enrollmentStatus === 'PENDING';
+      case 'REJECTED':
+        return l.enrollmentStatus === 'REJECTED';
+      case 'ONLINE_GROUP':
+        return l.sessionType === 'GROUP' && !isOffline;
+      case 'OFFLINE_GROUP':
+        return l.sessionType === 'GROUP' && isOffline;
+      case 'UPCOMING':
+        return (
+          l.sessionStatus !== 'CANCELLED' &&
+          l.sessionStatus !== 'COMPLETED' &&
+          l.enrollmentStatus !== 'REJECTED' &&
+          l.enrollmentStatus !== 'CANCELLED' &&
+          new Date(l.endTime).getTime() >= nowMs
+        );
+      case 'COMPLETED':
+        return l.sessionStatus === 'COMPLETED';
+      case 'CANCELLED':
+        return (
+          l.sessionStatus === 'CANCELLED' || l.enrollmentStatus === 'CANCELLED'
+        );
+      case 'ALL':
+      default:
+        return true;
+    }
+  });
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 space-y-8">
@@ -272,7 +331,7 @@ export function DashboardPage() {
             <TeacherSessionManager onChanged={loadDashboard} />
           )}
 
-          {/* Student Individual & Group Session Bookings */}
+          {/* Student Individual & Group Session Bookings ("جلساتي") */}
           <div
             className="bg-white border border-slate-200 rounded-xl p-6 space-y-4"
             data-testid="student-lesson-enrollments"
@@ -290,26 +349,68 @@ export function DashboardPage() {
               </Link>
             </div>
 
+            {lessonEnrollments.length > 0 && (
+              <div
+                className="flex flex-wrap items-center gap-1 p-1 bg-slate-100 rounded-lg"
+                role="tablist"
+                aria-label="تصفية جلساتي"
+              >
+                {[
+                  { code: 'ALL' as const, label: 'الكل' },
+                  { code: 'INDIVIDUAL' as const, label: 'طلبات فردية' },
+                  { code: 'ACCEPTED_1ON1' as const, label: 'فردية مقبولة' },
+                  { code: 'PENDING' as const, label: 'قيد الانتظار' },
+                  { code: 'REJECTED' as const, label: 'مرفوضة' },
+                  { code: 'ONLINE_GROUP' as const, label: 'مجموعات أونلاين' },
+                  { code: 'OFFLINE_GROUP' as const, label: 'مجموعات أوفلاين' },
+                  { code: 'UPCOMING' as const, label: 'القادمة' },
+                  { code: 'COMPLETED' as const, label: 'المكتملة' },
+                  { code: 'CANCELLED' as const, label: 'الملغاة' },
+                ].map((f) => (
+                  <button
+                    key={f.code}
+                    type="button"
+                    role="tab"
+                    aria-selected={lessonFilter === f.code}
+                    onClick={() => setLessonFilter(f.code)}
+                    className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-colors whitespace-nowrap cursor-pointer ${
+                      lessonFilter === f.code
+                        ? 'bg-white text-slate-900 shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+            )}
+
             {lessonEnrollments.length === 0 ? (
               <p className="text-sm text-slate-500">
                 لم ترسل طلبات حجز لجلسات فردية أو جماعية بعد.
               </p>
+            ) : filteredLessonEnrollments.length === 0 ? (
+              <p className="text-sm text-slate-500 py-4 text-center">
+                لا توجد جلسات ضمن هذا التصنيف.
+              </p>
             ) : (
               <div className="divide-y divide-slate-100">
-                {lessonEnrollments.map((item) => {
+                {filteredLessonEnrollments.map((item) => {
                   const canCancel =
                     (item.enrollmentStatus === 'PENDING' ||
                       item.enrollmentStatus === 'ACCEPTED') &&
                     item.sessionStatus !== 'CANCELLED' &&
                     item.sessionStatus !== 'COMPLETED' &&
                     Date.now() < new Date(item.startTime).getTime();
+                  const isOffline = isOfflineDeliveryMode(item.deliveryMode);
 
                   return (
                     <div
                       key={item.enrollmentId}
-                      className="py-3.5 flex flex-col lg:flex-row lg:items-center justify-between gap-3"
+                      data-testid={`student-lesson-row-${item.enrollmentId}`}
+                      className="py-4 flex flex-col lg:flex-row lg:items-center justify-between gap-3"
                     >
-                      <div className="space-y-1">
+                      <div className="space-y-1.5">
                         <div className="flex flex-wrap items-center gap-2 text-xs">
                           <span className="font-semibold text-slate-900">
                             {SESSION_TYPE_LABELS_AR[item.sessionType] ||
@@ -328,6 +429,31 @@ export function DashboardPage() {
                             {ENROLLMENT_STATUS_LABELS_AR[item.enrollmentStatus] ||
                               item.enrollmentStatus}
                           </span>
+                          {(item.subjectNameAr || item.gradeNameAr) && (
+                            <>
+                              <span aria-hidden="true">·</span>
+                              <span className="text-teal-800 font-medium">
+                                {[
+                                  item.subjectNameAr,
+                                  item.gradeNameAr,
+                                  item.systemNameAr,
+                                ]
+                                  .filter(Boolean)
+                                  .join(' · ')}
+                              </span>
+                            </>
+                          )}
+                          {item.price !== undefined && (
+                            <>
+                              <span aria-hidden="true">·</span>
+                              <span className="font-mono-num font-bold text-slate-900">
+                                {formatCurrencyPrice(
+                                  item.price,
+                                  item.currency || 'EGP'
+                                )}
+                              </span>
+                            </>
+                          )}
                         </div>
 
                         <div className="text-sm font-bold text-slate-900">
@@ -335,25 +461,53 @@ export function DashboardPage() {
                         </div>
 
                         <div className="text-xs text-slate-600 flex flex-wrap items-center gap-3">
-                          <span>المدرّب: {item.teacherName}</span>
+                          <span>
+                            المعلّم:{' '}
+                            {item.teacherUserId ? (
+                              <Link
+                                to={`/instructors/${item.teacherUserId}`}
+                                className="font-semibold text-teal-700 hover:underline"
+                              >
+                                {item.teacherName}
+                              </Link>
+                            ) : (
+                              item.teacherName
+                            )}
+                          </span>
                           <span className="font-mono-num">
                             {formatSessionDateRange(item.startTime, item.endTime)}
+                            {item.durationMinutes
+                              ? ` (${item.durationMinutes} د)`
+                              : ''}
                           </span>
                           <span className="inline-flex items-center gap-1">
-                            {item.deliveryMode === 'ONLINE' ? (
+                            {!isOffline ? (
                               <Video className="w-3.5 h-3.5 text-teal-700" />
                             ) : (
                               <MapPin className="w-3.5 h-3.5 text-teal-700" />
                             )}
-                            {item.deliveryMode === 'ONLINE'
-                              ? 'عن بُعد'
-                              : item.location || 'حضوري'}
+                            {DELIVERY_MODE_LABELS_AR[item.deliveryMode] ||
+                              item.deliveryMode}
                           </span>
                         </div>
+
+                        {isOffline && item.location && (
+                          <div className="text-xs text-slate-700 font-medium flex items-center gap-1">
+                            <MapPin className="w-3.5 h-3.5 text-teal-700 shrink-0" />
+                            <span>
+                              العنوان: {item.location}
+                              {item.isDemoLocation &&
+                              !item.location.includes('موقع عرض تجريبي')
+                                ? ' (موقع عرض تجريبي)'
+                                : ''}
+                            </span>
+                          </div>
+                        )}
                       </div>
 
                       <div className="flex flex-wrap items-center gap-2 shrink-0">
                         {item.enrollmentStatus === 'ACCEPTED' &&
+                          !isOffline &&
                           item.meetingUrl && (
                             <a
                               href={item.meetingUrl}

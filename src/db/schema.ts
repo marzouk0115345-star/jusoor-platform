@@ -1054,10 +1054,19 @@ export const teachingSessions = pgTable(
       () => curriculumSubjects.id,
       { onDelete: 'set null' }
     ),
+    systemId: integer('system_id').references(() => educationalSystems.id, {
+      onDelete: 'set null',
+    }),
     gradeId: integer('grade_id').references(() => educationalGrades.id, {
       onDelete: 'set null',
     }),
     stageId: integer('stage_id').references(() => educationalStages.id, {
+      onDelete: 'set null',
+    }),
+    divisionId: integer('division_id').references(() => secondaryDivisions.id, {
+      onDelete: 'set null',
+    }),
+    pathwayId: integer('pathway_id').references(() => baccalaureatePathways.id, {
       onDelete: 'set null',
     }),
     sessionType: text('session_type').notNull(), // ONE_TO_ONE | GROUP
@@ -1072,17 +1081,31 @@ export const teachingSessions = pgTable(
     currency: text('currency').notNull().default('USD'),
     deliveryMode: text('delivery_mode').notNull().default('ONLINE'), // ONLINE | IN_PERSON
     location: text('location'),
+    governorate: text('governorate'),
+    city: text('city'),
+    district: text('district'),
+    streetName: text('street_name'),
+    buildingOrCenterName: text('building_or_center_name'),
+    locationNotes: text('location_notes'),
+    isDemoLocation: boolean('is_demo_location').notNull().default(false),
     meetingUrl: text('meeting_url'),
     registrationDeadline: timestamp('registration_deadline'),
     status: text('status').notNull().default('OPEN'), // OPEN | FULL | CANCELLED | COMPLETED
+    seedKey: text('seed_key'),
     isDemo: boolean('is_demo').notNull().default(false),
     createdAt: timestamp('created_at').notNull().defaultNow(),
     updatedAt: timestamp('updated_at').notNull().defaultNow(),
   },
   (table) => [
+    uniqueIndex('teaching_sessions_seed_key_uq').on(table.seedKey),
     index('teaching_sessions_teacher_idx').on(table.teacherUserId),
     index('teaching_sessions_subject_idx').on(table.subjectId),
     index('teaching_sessions_curr_subject_idx').on(table.curriculumSubjectId),
+    index('teaching_sessions_system_idx').on(table.systemId),
+    index('teaching_sessions_grade_idx').on(table.gradeId),
+    index('teaching_sessions_division_idx').on(table.divisionId),
+    index('teaching_sessions_pathway_idx').on(table.pathwayId),
+    index('teaching_sessions_delivery_idx').on(table.deliveryMode),
     index('teaching_sessions_type_status_idx').on(
       table.sessionType,
       table.status
@@ -1498,6 +1521,10 @@ export const teachingSessionsRelations = relations(
       fields: [teachingSessions.curriculumSubjectId],
       references: [curriculumSubjects.id],
     }),
+    system: one(educationalSystems, {
+      fields: [teachingSessions.systemId],
+      references: [educationalSystems.id],
+    }),
     grade: one(educationalGrades, {
       fields: [teachingSessions.gradeId],
       references: [educationalGrades.id],
@@ -1505,6 +1532,14 @@ export const teachingSessionsRelations = relations(
     stage: one(educationalStages, {
       fields: [teachingSessions.stageId],
       references: [educationalStages.id],
+    }),
+    division: one(secondaryDivisions, {
+      fields: [teachingSessions.divisionId],
+      references: [secondaryDivisions.id],
+    }),
+    pathway: one(baccalaureatePathways, {
+      fields: [teachingSessions.pathwayId],
+      references: [baccalaureatePathways.id],
     }),
     enrollments: many(sessionEnrollments),
   })

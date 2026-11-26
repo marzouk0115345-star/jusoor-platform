@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { eq, and, asc, desc, inArray, isNull } from 'drizzle-orm';
+import { eq, and, asc, desc, inArray, isNull, gt, or, sql } from 'drizzle-orm';
 import { db } from '../../db/index.ts';
 import {
   academicYears,
@@ -31,8 +31,12 @@ import {
 } from '../auth.ts';
 import {
   canAssignTeacherToCurriculumSubject,
+  computeIndividualSlotStatus,
   computeSessionAvailability,
   filterAndSortDiscoveredTeachers,
+  formatOfflineAddress,
+  isOfflineDeliveryMode,
+  normalizeDeliveryMode,
   validateCurriculumContextCombination,
   type DeliveryMode,
   type SessionStatus,
@@ -450,7 +454,7 @@ router.get('/curriculum/subjects', async (req, res) => {
     const csIds = rawRows.map((r) => r.id);
     const subjectIds = Array.from(new Set(rawRows.map((r) => r.subjectId)));
 
-    const [activeAssignments, openSessions] = await Promise.all([
+    const [activeAssignments, openSessionAggs] = await Promise.all([
       csIds.length > 0
         ? db
             .select({
@@ -468,23 +472,38 @@ router.get('/curriculum/subjects', async (req, res) => {
               )
             )
         : Promise.resolve([]),
-      subjectIds.length > 0
+      csIds.length > 0 && subjectIds.length > 0
         ? db
             .select({
-              id: teachingSessions.id,
               teacherUserId: teachingSessions.teacherUserId,
               curriculumSubjectId: teachingSessions.curriculumSubjectId,
               subjectId: teachingSessions.subjectId,
               gradeId: teachingSessions.gradeId,
-              endTime: teachingSessions.endTime,
-              status: teachingSessions.status,
+              sessionCount: sql<number>`count(*)::int`,
             })
             .from(teachingSessions)
-            .where(inArray(teachingSessions.status, ['OPEN', 'FULL']))
+            .where(
+              and(
+                eq(teachingSessions.status, 'OPEN'),
+                gt(teachingSessions.endTime, new Date()),
+                or(
+                  inArray(teachingSessions.curriculumSubjectId, csIds),
+                  and(
+                    isNull(teachingSessions.curriculumSubjectId),
+                    inArray(teachingSessions.subjectId, subjectIds)
+                  )
+                )
+              )
+            )
+            .groupBy(
+              teachingSessions.teacherUserId,
+              teachingSessions.curriculumSubjectId,
+              teachingSessions.subjectId,
+              teachingSessions.gradeId
+            )
         : Promise.resolve([]),
     ]);
 
-    const nowMs = Date.now();
     const teachersByCs = new Map<number, Set<number>>();
     for (const a of activeAssignments) {
       if (a.accountStatus !== 'ACTIVE') continue;
@@ -492,10 +511,6 @@ router.get('/curriculum/subjects', async (req, res) => {
       set.add(a.teacherUserId);
       teachersByCs.set(a.curriculumSubjectId, set);
     }
-
-    const upcomingSessions = openSessions.filter(
-      (s) => new Date(s.endTime).getTime() > nowMs && s.status === 'OPEN'
-    );
 
     const enriched = rawRows
       .filter((r) => {
@@ -521,14 +536,18 @@ router.get('/curriculum/subjects', async (req, res) => {
       })
       .map((r) => {
         const assignedTeacherSet = teachersByCs.get(r.id) || new Set<number>();
-        const matchingSessionsCount = upcomingSessions.filter(
-          (s) =>
-            s.curriculumSubjectId === r.id ||
-            (s.curriculumSubjectId === null &&
-              s.subjectId === r.subjectId &&
-              assignedTeacherSet.has(s.teacherUserId) &&
-              (s.gradeId === null || s.gradeId === r.gradeId))
-        ).length;
+        let matchingSessionsCount = 0;
+        for (const agg of openSessionAggs) {
+          if (
+            agg.curriculumSubjectId === r.id ||
+            (agg.curriculumSubjectId === null &&
+              agg.subjectId === r.subjectId &&
+              assignedTeacherSet.has(agg.teacherUserId) &&
+              (agg.gradeId === null || agg.gradeId === r.gradeId))
+          ) {
+            matchingSessionsCount += Number(agg.sessionCount || 0);
+          }
+        }
 
         return {
           ...r,
@@ -739,21 +758,25 @@ router.get(
             .where(
               and(
                 inArray(teachingSessions.teacherUserId, teacherIds),
-                inArray(teachingSessions.status, ['OPEN', 'FULL'])
+                inArray(teachingSessions.status, ['OPEN', 'FULL']),
+                gt(teachingSessions.endTime, new Date()),
+                or(
+                  eq(teachingSessions.curriculumSubjectId, curriculumSubjectId),
+                  and(
+                    isNull(teachingSessions.curriculumSubjectId),
+                    eq(teachingSessions.subjectId, csRow.subjectId),
+                    or(
+                      isNull(teachingSessions.gradeId),
+                      eq(teachingSessions.gradeId, csRow.gradeId)
+                    )
+                  )
+                )
               )
             )
             .orderBy(asc(teachingSessions.startTime)),
         ]);
 
-      const nowMs = Date.now();
-      const relevantSessions = teacherSessions.filter(
-        (s) =>
-          new Date(s.endTime).getTime() > nowMs &&
-          (s.curriculumSubjectId === curriculumSubjectId ||
-            (s.curriculumSubjectId === null &&
-              s.subjectId === csRow.subjectId &&
-              (s.gradeId === null || s.gradeId === csRow.gradeId)))
-      );
+      const relevantSessions = teacherSessions;
 
       const relevantSessionIds = relevantSessions.map((s) => s.id);
       const enrollmentRows =
@@ -802,11 +825,22 @@ router.get(
             const acceptedCount = sessEnrs.filter(
               (e) => e.status === 'ACCEPTED'
             ).length;
+            const pendingCount = sessEnrs.filter(
+              (e) => e.status === 'PENDING'
+            ).length;
             const avail = computeSessionAvailability({
               sessionType: s.sessionType as SessionType,
               capacity: s.capacity,
               acceptedCount,
               status: s.status as SessionStatus,
+              startTime: s.startTime,
+              registrationDeadline: s.registrationDeadline,
+            });
+            const slotStatus = computeIndividualSlotStatus({
+              sessionType: s.sessionType as SessionType,
+              status: s.status as SessionStatus,
+              acceptedCount,
+              pendingCount,
               startTime: s.startTime,
               registrationDeadline: s.registrationDeadline,
             });
@@ -820,6 +854,19 @@ router.get(
             );
             const isAccepted = myEnrollment?.status === 'ACCEPTED';
             const canSeeMeetingDetails = isTeacherOrAdmin || isAccepted;
+            const isOffline = isOfflineDeliveryMode(s.deliveryMode);
+            const publicLocation = isOffline
+              ? s.location ||
+                formatOfflineAddress({
+                  governorate: s.governorate,
+                  city: s.city,
+                  district: s.district,
+                  streetName: s.streetName,
+                  buildingOrCenterName: s.buildingOrCenterName,
+                  locationNotes: s.locationNotes,
+                }) ||
+                null
+              : null;
 
             return {
               id: s.id,
@@ -832,24 +879,29 @@ router.get(
               durationMinutes: s.durationMinutes,
               capacity: avail.effectiveCapacity,
               acceptedCount,
+              pendingCount,
               remainingSeats: avail.remainingSeats,
               isFull: avail.isFull,
               isRegistrationOpen: avail.isRegistrationOpen,
+              slotStatus,
               price: s.price,
-              currency: s.currency,
-              deliveryMode: s.deliveryMode as DeliveryMode,
-              location:
-                s.deliveryMode === 'IN_PERSON'
-                  ? canSeeMeetingDetails
-                    ? s.location
-                    : s.location
-                    ? 'حضوري (يظهر العنوان التفصيلي بعد القبول)'
-                    : null
-                  : null,
+              currency: s.currency || 'EGP',
+              deliveryMode: normalizeDeliveryMode(s.deliveryMode) as DeliveryMode,
+              location: publicLocation,
+              governorate: isOffline ? s.governorate : null,
+              city: isOffline ? s.city : null,
+              district: isOffline ? s.district : null,
+              streetName: isOffline ? s.streetName : null,
+              buildingOrCenterName: isOffline ? s.buildingOrCenterName : null,
+              locationNotes: isOffline ? s.locationNotes : null,
+              isDemoLocation: Boolean(s.isDemoLocation),
               meetingUrl: canSeeMeetingDetails ? s.meetingUrl : null,
               status: s.status as SessionStatus,
               curriculumSubjectId: s.curriculumSubjectId,
               gradeId: s.gradeId,
+              systemId: s.systemId,
+              divisionId: s.divisionId,
+              pathwayId: s.pathwayId,
               myEnrollment,
             };
           });
@@ -860,8 +912,17 @@ router.get(
           const groupCount = formattedSessions.filter(
             (s) => s.sessionType === 'GROUP' && s.isRegistrationOpen
           ).length;
+          const onlineGroupSessionsCount = formattedSessions.filter(
+            (s) => s.sessionType === 'GROUP' && s.deliveryMode === 'ONLINE' && s.isRegistrationOpen
+          ).length;
+          const onlineIndividualSlotsCount = formattedSessions.filter(
+            (s) => s.sessionType === 'ONE_TO_ONE' && s.deliveryMode === 'ONLINE' && s.isRegistrationOpen
+          ).length;
+          const offlineGroupSessionsCount = formattedSessions.filter(
+            (s) => s.sessionType === 'GROUP' && s.deliveryMode === 'IN_PERSON' && s.isRegistrationOpen
+          ).length;
 
-          const effectivePrice = Number(a.hourlyRate || a.profileHourlyRate || 25);
+          const effectivePrice = Number(a.hourlyRate || a.profileHourlyRate || 120);
 
           return {
             teacherId: a.teacherUserId,
@@ -878,7 +939,7 @@ router.get(
             ratingAvg: Number(a.ratingAvg || 0),
             reviewsCount: a.reviewsCount ?? 0,
             effectivePrice,
-            currency: a.currency || a.profileCurrency || 'USD',
+            currency: a.currency || a.profileCurrency || 'EGP',
             supportsOnline: a.supportsOnline,
             supportsInPerson: a.supportsInPerson,
             languagesOffered:
@@ -890,6 +951,9 @@ router.get(
             publishedCoursesCount: tCourses.length,
             individualSessionsCount: individualCount,
             groupSessionsCount: groupCount,
+            onlineGroupSessionsCount,
+            onlineIndividualSlotsCount,
+            offlineGroupSessionsCount,
             sessions: formattedSessions,
             teachingAssignmentsSummary: tAllAssignments.map((ta) => ({
               curriculumSubjectId: ta.curriculumSubjectId,
@@ -906,9 +970,12 @@ router.get(
         });
 
       const q = typeof req.query.q === 'string' ? req.query.q : '';
+      const rawDelivery = typeof req.query.deliveryMode === 'string' ? req.query.deliveryMode.trim().toUpperCase() : '';
       const deliveryMode =
-        req.query.deliveryMode === 'ONLINE' || req.query.deliveryMode === 'IN_PERSON'
-          ? req.query.deliveryMode
+        rawDelivery === 'ONLINE'
+          ? 'ONLINE'
+          : isOfflineDeliveryMode(rawDelivery)
+          ? 'IN_PERSON'
           : '';
       const language = typeof req.query.language === 'string' ? req.query.language : '';
       const hasSessionsOnly = req.query.hasSessions === 'true';

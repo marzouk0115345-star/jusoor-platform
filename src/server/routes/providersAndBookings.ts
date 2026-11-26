@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { eq, and, desc, asc, or } from 'drizzle-orm';
+import { eq, and, desc, asc, or, gt, sql } from 'drizzle-orm';
 import { db } from '../../db/index.ts';
 import {
   users,
@@ -8,6 +8,7 @@ import {
   availability,
   bookings,
   sessions,
+  teachingSessions,
   payments,
   earnings,
   notifications,
@@ -65,21 +66,43 @@ router.get('/providers', optionalAuth, async (req: AuthRequest, res) => {
       return true;
     });
 
-    const enriched = await Promise.all(
-      filtered.map(async (p) => {
-        const slots = await db
-          .select()
-          .from(availability)
-          .where(
-            and(
-              eq(availability.providerUserId, p.userId),
-              eq(availability.isBooked, false)
-            )
+    const [allOpenSlots, openTeachingCounts] = await Promise.all([
+      db
+        .select()
+        .from(availability)
+        .where(eq(availability.isBooked, false))
+        .orderBy(asc(availability.slotDate), asc(availability.startTime)),
+      db
+        .select({
+          teacherUserId: teachingSessions.teacherUserId,
+          count: sql<number>`count(*)::int`,
+        })
+        .from(teachingSessions)
+        .where(
+          and(
+            eq(teachingSessions.status, 'OPEN'),
+            gt(teachingSessions.endTime, new Date())
           )
-          .orderBy(asc(availability.slotDate), asc(availability.startTime));
-        return { ...p, availableSlots: slots };
-      })
+        )
+        .groupBy(teachingSessions.teacherUserId),
+    ]);
+
+    const slotsByProvider = new Map<number, typeof allOpenSlots>();
+    for (const slot of allOpenSlots) {
+      const list = slotsByProvider.get(slot.providerUserId) ?? [];
+      list.push(slot);
+      slotsByProvider.set(slot.providerUserId, list);
+    }
+
+    const teachingCountMap = new Map<number, number>(
+      openTeachingCounts.map((r) => [r.teacherUserId, r.count])
     );
+
+    const enriched = filtered.map((p) => ({
+      ...p,
+      availableSlots: slotsByProvider.get(p.userId) ?? [],
+      openSessionsCount: teachingCountMap.get(p.userId) ?? 0,
+    }));
 
     res.json({ providers: enriched });
   } catch (error) {

@@ -1,6 +1,19 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { eq, and, desc, asc, ne, inArray, sql } from 'drizzle-orm';
+import {
+  eq,
+  and,
+  desc,
+  asc,
+  ne,
+  gte,
+  lte,
+  or,
+  ilike,
+  inArray,
+  sql,
+  type SQL,
+} from 'drizzle-orm';
 import { db } from '../../db/index.ts';
 import {
   teachingSessions,
@@ -12,6 +25,8 @@ import {
   educationalStages,
   educationalGrades,
   educationalSystems,
+  secondaryDivisions,
+  baccalaureatePathways,
   curriculumSubjects,
   subjects,
   fields,
@@ -26,10 +41,14 @@ import {
 import {
   calculateDurationMinutes,
   computeSessionAvailability,
+  computeIndividualSlotStatus,
   doTimeRangesOverlap,
   validateSessionSchedule,
   canCancelSessionEnrollment,
   canEditTeachingSession,
+  normalizeDeliveryMode,
+  isOfflineDeliveryMode,
+  formatOfflineAddress,
   type SessionType,
   type SessionStatus,
   type SessionEnrollmentStatus,
@@ -44,16 +63,26 @@ const createSessionSchema = z.object({
   description: z.string().trim().max(2000).optional().nullable(),
   subjectId: z.number().int().positive().optional().nullable(),
   curriculumSubjectId: z.number().int().positive().optional().nullable(),
+  systemId: z.number().int().positive().optional().nullable(),
   gradeId: z.number().int().positive().optional().nullable(),
   stageId: z.number().int().positive().optional().nullable(),
+  divisionId: z.number().int().positive().optional().nullable(),
+  pathwayId: z.number().int().positive().optional().nullable(),
   startTime: z.string().min(1, 'وقت البداية مطلوب'),
   endTime: z.string().min(1, 'وقت النهاية مطلوب'),
   capacity: z.number().int().min(1).max(500).optional(),
   minStudents: z.number().int().min(1).max(500).optional().nullable(),
-  price: z.number().min(0).max(10000).default(0),
-  currency: z.string().trim().min(3).max(6).default('USD'),
-  deliveryMode: z.enum(['ONLINE', 'IN_PERSON']).default('ONLINE'),
-  location: z.string().trim().max(300).optional().nullable(),
+  price: z.number().min(0).max(50000).default(0),
+  currency: z.string().trim().min(3).max(6).default('EGP'),
+  deliveryMode: z.enum(['ONLINE', 'IN_PERSON', 'OFFLINE']).default('ONLINE'),
+  location: z.string().trim().max(400).optional().nullable(),
+  governorate: z.string().trim().max(100).optional().nullable(),
+  city: z.string().trim().max(100).optional().nullable(),
+  district: z.string().trim().max(120).optional().nullable(),
+  streetName: z.string().trim().max(160).optional().nullable(),
+  buildingOrCenterName: z.string().trim().max(180).optional().nullable(),
+  locationNotes: z.string().trim().max(300).optional().nullable(),
+  isDemoLocation: z.boolean().optional(),
   meetingUrl: z.string().trim().max(500).optional().nullable(),
   registrationDeadline: z.string().optional().nullable(),
 });
@@ -130,85 +159,137 @@ async function enrichSessionsForViewer(
   const gradeIds = Array.from(
     new Set(sessionRows.map((s) => s.gradeId).filter((v): v is number => v !== null))
   );
+  const systemIds = Array.from(
+    new Set(sessionRows.map((s) => s.systemId).filter((v): v is number => v !== null))
+  );
+  const divisionIds = Array.from(
+    new Set(sessionRows.map((s) => s.divisionId).filter((v): v is number => v !== null))
+  );
+  const pathwayIds = Array.from(
+    new Set(sessionRows.map((s) => s.pathwayId).filter((v): v is number => v !== null))
+  );
 
-  const [teacherRows, providerRows, subjectRows, stageRows, gradeRows, enrollmentRows] =
-    await Promise.all([
-      db
-        .select({
-          id: users.id,
-          fullName: users.fullName,
-          avatarUrl: users.avatarUrl,
-        })
-        .from(users)
-        .where(inArray(users.id, teacherIds)),
-      db
-        .select({
-          userId: providerProfiles.userId,
-          headline: providerProfiles.headline,
-          providerType: providerProfiles.providerType,
-          verificationStatus: providerProfiles.verificationStatus,
-        })
-        .from(providerProfiles)
-        .where(inArray(providerProfiles.userId, teacherIds)),
-      subjectIds.length > 0
-        ? db
-            .select({
-              id: subjects.id,
-              nameAr: subjects.nameAr,
-              nameEn: subjects.nameEn,
-              fieldId: subjects.fieldId,
-              fieldNameAr: fields.nameAr,
-            })
-            .from(subjects)
-            .innerJoin(fields, eq(subjects.fieldId, fields.id))
-            .where(inArray(subjects.id, subjectIds))
-        : Promise.resolve([]),
-      stageIds.length > 0
-        ? db
-            .select({
-              id: educationalStages.id,
-              nameAr: educationalStages.nameAr,
-              nameEn: educationalStages.nameEn,
-            })
-            .from(educationalStages)
-            .where(inArray(educationalStages.id, stageIds))
-        : Promise.resolve([]),
-      gradeIds.length > 0
-        ? db
-            .select({
-              id: educationalGrades.id,
-              nameAr: educationalGrades.nameAr,
-              nameEn: educationalGrades.nameEn,
-              systemNameAr: educationalSystems.nameAr,
-              systemNameEn: educationalSystems.nameEn,
-            })
-            .from(educationalGrades)
-            .innerJoin(
-              educationalSystems,
-              eq(educationalGrades.systemId, educationalSystems.id)
-            )
-            .where(inArray(educationalGrades.id, gradeIds))
-        : Promise.resolve([]),
-      db
-        .select({
-          id: sessionEnrollments.id,
-          sessionId: sessionEnrollments.sessionId,
-          studentUserId: sessionEnrollments.studentUserId,
-          status: sessionEnrollments.status,
-          notes: sessionEnrollments.notes,
-          requestedAt: sessionEnrollments.requestedAt,
-          respondedAt: sessionEnrollments.respondedAt,
-          cancelledAt: sessionEnrollments.cancelledAt,
-        })
-        .from(sessionEnrollments)
-        .where(inArray(sessionEnrollments.sessionId, sessionIds)),
-    ]);
+  const [
+    teacherRows,
+    providerRows,
+    subjectRows,
+    stageRows,
+    gradeRows,
+    systemRows,
+    divisionRows,
+    pathwayRows,
+    enrollmentRows,
+  ] = await Promise.all([
+    db
+      .select({
+        id: users.id,
+        fullName: users.fullName,
+        avatarUrl: users.avatarUrl,
+      })
+      .from(users)
+      .where(inArray(users.id, teacherIds)),
+    db
+      .select({
+        userId: providerProfiles.userId,
+        headline: providerProfiles.headline,
+        providerType: providerProfiles.providerType,
+        verificationStatus: providerProfiles.verificationStatus,
+      })
+      .from(providerProfiles)
+      .where(inArray(providerProfiles.userId, teacherIds)),
+    subjectIds.length > 0
+      ? db
+          .select({
+            id: subjects.id,
+            nameAr: subjects.nameAr,
+            nameEn: subjects.nameEn,
+            fieldId: subjects.fieldId,
+            fieldNameAr: fields.nameAr,
+          })
+          .from(subjects)
+          .innerJoin(fields, eq(subjects.fieldId, fields.id))
+          .where(inArray(subjects.id, subjectIds))
+      : Promise.resolve([]),
+    stageIds.length > 0
+      ? db
+          .select({
+            id: educationalStages.id,
+            nameAr: educationalStages.nameAr,
+            nameEn: educationalStages.nameEn,
+          })
+          .from(educationalStages)
+          .where(inArray(educationalStages.id, stageIds))
+      : Promise.resolve([]),
+    gradeIds.length > 0
+      ? db
+          .select({
+            id: educationalGrades.id,
+            nameAr: educationalGrades.nameAr,
+            nameEn: educationalGrades.nameEn,
+            systemId: educationalSystems.id,
+            systemNameAr: educationalSystems.nameAr,
+            systemNameEn: educationalSystems.nameEn,
+          })
+          .from(educationalGrades)
+          .innerJoin(
+            educationalSystems,
+            eq(educationalGrades.systemId, educationalSystems.id)
+          )
+          .where(inArray(educationalGrades.id, gradeIds))
+      : Promise.resolve([]),
+    systemIds.length > 0
+      ? db
+          .select({
+            id: educationalSystems.id,
+            nameAr: educationalSystems.nameAr,
+            nameEn: educationalSystems.nameEn,
+          })
+          .from(educationalSystems)
+          .where(inArray(educationalSystems.id, systemIds))
+      : Promise.resolve([]),
+    divisionIds.length > 0
+      ? db
+          .select({
+            id: secondaryDivisions.id,
+            nameAr: secondaryDivisions.nameAr,
+            nameEn: secondaryDivisions.nameEn,
+          })
+          .from(secondaryDivisions)
+          .where(inArray(secondaryDivisions.id, divisionIds))
+      : Promise.resolve([]),
+    pathwayIds.length > 0
+      ? db
+          .select({
+            id: baccalaureatePathways.id,
+            nameAr: baccalaureatePathways.nameAr,
+            nameEn: baccalaureatePathways.nameEn,
+          })
+          .from(baccalaureatePathways)
+          .where(inArray(baccalaureatePathways.id, pathwayIds))
+      : Promise.resolve([]),
+    db
+      .select({
+        id: sessionEnrollments.id,
+        sessionId: sessionEnrollments.sessionId,
+        studentUserId: sessionEnrollments.studentUserId,
+        status: sessionEnrollments.status,
+        notes: sessionEnrollments.notes,
+        requestedAt: sessionEnrollments.requestedAt,
+        respondedAt: sessionEnrollments.respondedAt,
+        cancelledAt: sessionEnrollments.cancelledAt,
+      })
+      .from(sessionEnrollments)
+      .where(inArray(sessionEnrollments.sessionId, sessionIds)),
+  ]);
 
   const teacherMap = new Map(teacherRows.map((t) => [t.id, t]));
   const providerMap = new Map(providerRows.map((p) => [p.userId, p]));
   const subjectMap = new Map(subjectRows.map((s) => [s.id, s]));
   const stageMap = new Map(stageRows.map((s) => [s.id, s]));
   const gradeMap = new Map(gradeRows.map((g) => [g.id, g]));
+  const systemMap = new Map(systemRows.map((s) => [s.id, s]));
+  const divisionMap = new Map(divisionRows.map((d) => [d.id, d]));
+  const pathwayMap = new Map(pathwayRows.map((p) => [p.id, p]));
 
   const viewerIsAdmin = Boolean(viewer?.roles.includes('ADMIN'));
 
@@ -235,6 +316,15 @@ async function enrichSessionsForViewer(
       registrationDeadline: s.registrationDeadline,
     });
 
+    const slotStatus = computeIndividualSlotStatus({
+      sessionType: s.sessionType as SessionType,
+      status: s.status as SessionStatus,
+      acceptedCount,
+      pendingCount,
+      startTime: s.startTime,
+      registrationDeadline: s.registrationDeadline,
+    });
+
     const isTeacherOrAdmin = Boolean(
       viewer && (viewer.id === s.teacherUserId || viewerIsAdmin)
     );
@@ -250,6 +340,14 @@ async function enrichSessionsForViewer(
     const subject = s.subjectId ? subjectMap.get(s.subjectId) : undefined;
     const stage = s.stageId ? stageMap.get(s.stageId) : undefined;
     const grade = s.gradeId ? gradeMap.get(s.gradeId) : undefined;
+    const system = s.systemId ? systemMap.get(s.systemId) : undefined;
+    const division = s.divisionId ? divisionMap.get(s.divisionId) : undefined;
+    const pathway = s.pathwayId ? pathwayMap.get(s.pathwayId) : undefined;
+
+    const isOffline = isOfflineDeliveryMode(s.deliveryMode);
+    const publicPhysicalLocation = isOffline
+      ? formatOfflineAddress(s) || s.location || null
+      : null;
 
     return {
       id: s.id,
@@ -262,15 +360,23 @@ async function enrichSessionsForViewer(
       subjectNameAr: subject?.nameAr || null,
       subjectNameEn: subject?.nameEn || null,
       curriculumSubjectId: s.curriculumSubjectId,
+      systemId: s.systemId ?? grade?.systemId ?? null,
+      systemNameAr: system?.nameAr || grade?.systemNameAr || null,
+      systemNameEn: system?.nameEn || grade?.systemNameEn || null,
       gradeId: s.gradeId,
       gradeNameAr: grade?.nameAr || null,
       gradeNameEn: grade?.nameEn || null,
-      systemNameAr: grade?.systemNameAr || null,
-      systemNameEn: grade?.systemNameEn || null,
+      divisionId: s.divisionId,
+      divisionNameAr: division?.nameAr || null,
+      divisionNameEn: division?.nameEn || null,
+      pathwayId: s.pathwayId,
+      pathwayNameAr: pathway?.nameAr || null,
+      pathwayNameEn: pathway?.nameEn || null,
       fieldId: subject?.fieldId || null,
       fieldNameAr: subject?.fieldNameAr || null,
       stageId: s.stageId,
       stageNameAr: stage?.nameAr || null,
+      stageNameEn: stage?.nameEn || null,
       sessionType: s.sessionType as SessionType,
       title: s.title,
       description: s.description,
@@ -281,20 +387,22 @@ async function enrichSessionsForViewer(
       minStudents: s.minStudents,
       acceptedCount,
       pendingCount: isTeacherOrAdmin ? pendingCount : undefined,
+      hasPendingRequests: pendingCount > 0,
+      slotStatus,
       remainingSeats: availability.remainingSeats,
       isFull: availability.isFull,
       isRegistrationOpen: availability.isRegistrationOpen,
       price: s.price,
       currency: s.currency,
-      deliveryMode: s.deliveryMode as DeliveryMode,
-      location:
-        s.deliveryMode === 'IN_PERSON'
-          ? canSeeMeetingDetails
-            ? s.location
-            : s.location
-            ? 'جلسة حضورية (يظهر العنوان التفصيلي بعد القبول)'
-            : null
-          : null,
+      deliveryMode: normalizeDeliveryMode(s.deliveryMode) as DeliveryMode,
+      location: publicPhysicalLocation,
+      governorate: isOffline ? s.governorate : null,
+      city: isOffline ? s.city : null,
+      district: isOffline ? s.district : null,
+      streetName: isOffline ? s.streetName : null,
+      buildingOrCenterName: isOffline ? s.buildingOrCenterName : null,
+      locationNotes: isOffline ? s.locationNotes : null,
+      isDemoLocation: isOffline ? s.isDemoLocation : false,
       meetingUrl: canSeeMeetingDetails ? s.meetingUrl : null,
       registrationDeadline: s.registrationDeadline,
       status: s.status as SessionStatus,
@@ -312,84 +420,223 @@ async function enrichSessionsForViewer(
 router.get('/teaching-sessions', optionalAuth, async (req: AuthRequest, res) => {
   try {
     const sessionType =
-      typeof req.query.sessionType === 'string' ? req.query.sessionType : undefined;
+      typeof req.query.sessionType === 'string' && req.query.sessionType
+        ? req.query.sessionType
+        : undefined;
     const teacherId = req.query.teacherId ? Number(req.query.teacherId) : undefined;
     const subjectId = req.query.subjectId ? Number(req.query.subjectId) : undefined;
     const curriculumSubjectId = req.query.curriculumSubjectId
       ? Number(req.query.curriculumSubjectId)
       : undefined;
+    const systemId = req.query.systemId ? Number(req.query.systemId) : undefined;
     const gradeId = req.query.gradeId ? Number(req.query.gradeId) : undefined;
     const stageId = req.query.stageId ? Number(req.query.stageId) : undefined;
+    const divisionId = req.query.divisionId ? Number(req.query.divisionId) : undefined;
+    const pathwayId = req.query.pathwayId ? Number(req.query.pathwayId) : undefined;
     const fieldId = req.query.fieldId ? Number(req.query.fieldId) : undefined;
     const status =
-      typeof req.query.status === 'string' ? req.query.status : undefined;
-    const deliveryMode =
-      typeof req.query.deliveryMode === 'string'
+      typeof req.query.status === 'string' && req.query.status
+        ? req.query.status
+        : undefined;
+    const deliveryModeRaw =
+      typeof req.query.deliveryMode === 'string' && req.query.deliveryMode
         ? req.query.deliveryMode
         : undefined;
+    const deliveryMode = deliveryModeRaw
+      ? normalizeDeliveryMode(deliveryModeRaw)
+      : undefined;
+    const dateExact =
+      typeof req.query.date === 'string' && req.query.date.trim()
+        ? req.query.date.trim()
+        : undefined;
     const dateFrom =
-      typeof req.query.dateFrom === 'string' ? req.query.dateFrom : undefined;
+      typeof req.query.dateFrom === 'string' && req.query.dateFrom.trim()
+        ? req.query.dateFrom.trim()
+        : undefined;
     const dateTo =
-      typeof req.query.dateTo === 'string' ? req.query.dateTo : undefined;
-    const q =
-      typeof req.query.q === 'string' ? req.query.q.trim().toLowerCase() : '';
+      typeof req.query.dateTo === 'string' && req.query.dateTo.trim()
+        ? req.query.dateTo.trim()
+        : undefined;
+    const minPrice =
+      req.query.minPrice !== undefined && req.query.minPrice !== ''
+        ? Number(req.query.minPrice)
+        : undefined;
+    const maxPrice =
+      req.query.maxPrice !== undefined && req.query.maxPrice !== ''
+        ? Number(req.query.maxPrice)
+        : undefined;
+    const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
     const includePast = req.query.includePast === 'true';
 
-    const rawRows = await db
-      .select()
-      .from(teachingSessions)
-      .orderBy(asc(teachingSessions.startTime));
+    const page = Math.max(1, Number(req.query.page || 1));
+    const maxLimit = teacherId ? 200 : 100;
+    const defaultLimit = teacherId ? 60 : 24;
+    const limit = Math.min(maxLimit, Math.max(1, Number(req.query.limit || defaultLimit)));
+    const offset = (page - 1) * limit;
 
-    const nowMs = Date.now();
-    const filtered = rawRows.filter((s) => {
-      if (sessionType && s.sessionType !== sessionType) return false;
-      if (teacherId && s.teacherUserId !== teacherId) return false;
-      if (curriculumSubjectId && s.curriculumSubjectId !== curriculumSubjectId) {
-        return false;
-      }
-      if (gradeId && s.gradeId !== gradeId) return false;
-      if (subjectId && s.subjectId !== subjectId) return false;
-      if (stageId && s.stageId !== stageId) return false;
-      if (deliveryMode && s.deliveryMode !== deliveryMode) return false;
-      if (status) {
-        if (s.status !== status) return false;
-      } else if (s.status === 'CANCELLED') {
-        return false;
-      }
-      if (!includePast && new Date(s.endTime).getTime() < nowMs && s.status !== 'COMPLETED') {
-        return false;
-      }
-      if (dateFrom) {
-        const fromMs = new Date(dateFrom).getTime();
-        if (Number.isFinite(fromMs) && new Date(s.startTime).getTime() < fromMs) {
-          return false;
-        }
-      }
-      if (dateTo) {
-        const toMs = new Date(dateTo).getTime();
-        if (Number.isFinite(toMs) && new Date(s.startTime).getTime() > toMs) {
-          return false;
-        }
-      }
-      return true;
-    });
+    const conditions: SQL[] = [];
 
-    let enriched = await enrichSessionsForViewer(filtered, req.authUser);
-
-    if (fieldId) {
-      enriched = enriched.filter((s) => s.fieldId === fieldId);
+    if (sessionType === 'ONE_TO_ONE' || sessionType === 'GROUP') {
+      conditions.push(eq(teachingSessions.sessionType, sessionType));
     }
-    if (q) {
-      enriched = enriched.filter(
-        (s) =>
-          s.title.toLowerCase().includes(q) ||
-          (s.description || '').toLowerCase().includes(q) ||
-          s.teacherName.toLowerCase().includes(q) ||
-          (s.subjectNameAr || '').toLowerCase().includes(q)
+    if (teacherId && Number.isInteger(teacherId)) {
+      conditions.push(eq(teachingSessions.teacherUserId, teacherId));
+    }
+    if (curriculumSubjectId && Number.isInteger(curriculumSubjectId)) {
+      conditions.push(eq(teachingSessions.curriculumSubjectId, curriculumSubjectId));
+    }
+    if (systemId && Number.isInteger(systemId)) {
+      conditions.push(eq(teachingSessions.systemId, systemId));
+    }
+    if (gradeId && Number.isInteger(gradeId)) {
+      conditions.push(eq(teachingSessions.gradeId, gradeId));
+    }
+    if (stageId && Number.isInteger(stageId)) {
+      conditions.push(eq(teachingSessions.stageId, stageId));
+    }
+    if (divisionId && Number.isInteger(divisionId)) {
+      conditions.push(eq(teachingSessions.divisionId, divisionId));
+    }
+    if (pathwayId && Number.isInteger(pathwayId)) {
+      conditions.push(eq(teachingSessions.pathwayId, pathwayId));
+    }
+    if (subjectId && Number.isInteger(subjectId)) {
+      conditions.push(eq(teachingSessions.subjectId, subjectId));
+    }
+    if (deliveryMode) {
+      conditions.push(eq(teachingSessions.deliveryMode, deliveryMode));
+    }
+    if (status) {
+      conditions.push(eq(teachingSessions.status, status));
+    } else {
+      conditions.push(ne(teachingSessions.status, 'CANCELLED'));
+    }
+
+    if (!includePast) {
+      const nowDt = new Date();
+      conditions.push(
+        or(
+          gte(teachingSessions.endTime, nowDt),
+          eq(teachingSessions.status, 'COMPLETED')
+        )!
       );
     }
 
-    res.json({ sessions: enriched });
+    if (dateExact) {
+      const dayStart = new Date(`${dateExact}T00:00:00.000Z`);
+      const dayEnd = new Date(`${dateExact}T23:59:59.999Z`);
+      if (!Number.isNaN(dayStart.getTime()) && !Number.isNaN(dayEnd.getTime())) {
+        conditions.push(gte(teachingSessions.startTime, dayStart));
+        conditions.push(lte(teachingSessions.startTime, dayEnd));
+      }
+    } else {
+      if (dateFrom) {
+        const fromDt = new Date(dateFrom);
+        if (!Number.isNaN(fromDt.getTime())) {
+          conditions.push(gte(teachingSessions.startTime, fromDt));
+        }
+      }
+      if (dateTo) {
+        const toDt = new Date(
+          dateTo.length === 10 ? `${dateTo}T23:59:59.999Z` : dateTo
+        );
+        if (!Number.isNaN(toDt.getTime())) {
+          conditions.push(lte(teachingSessions.startTime, toDt));
+        }
+      }
+    }
+
+    if (minPrice !== undefined && Number.isFinite(minPrice)) {
+      conditions.push(
+        sql`CAST(${teachingSessions.price} AS NUMERIC) >= ${minPrice}`
+      );
+    }
+    if (maxPrice !== undefined && Number.isFinite(maxPrice)) {
+      conditions.push(
+        sql`CAST(${teachingSessions.price} AS NUMERIC) <= ${maxPrice}`
+      );
+    }
+
+    if (fieldId && Number.isInteger(fieldId)) {
+      const fieldSubjRows = await db
+        .select({ id: subjects.id })
+        .from(subjects)
+        .where(eq(subjects.fieldId, fieldId));
+      const fSubjIds = fieldSubjRows.map((r) => r.id);
+      if (fSubjIds.length === 0) {
+        return res.json({ sessions: [], total: 0, page, limit, totalPages: 0 });
+      }
+      conditions.push(inArray(teachingSessions.subjectId, fSubjIds));
+    }
+
+    if (q) {
+      const likePattern = `%${q}%`;
+      const [matchedTeachers, matchedSubjects] = await Promise.all([
+        db
+          .select({ id: users.id })
+          .from(users)
+          .where(ilike(users.fullName, likePattern)),
+        db
+          .select({ id: subjects.id })
+          .from(subjects)
+          .where(
+            or(ilike(subjects.nameAr, likePattern), ilike(subjects.nameEn, likePattern))
+          ),
+      ]);
+
+      const searchParts: SQL[] = [
+        ilike(teachingSessions.title, likePattern),
+        ilike(teachingSessions.description, likePattern),
+        ilike(teachingSessions.location, likePattern),
+        ilike(teachingSessions.governorate, likePattern),
+        ilike(teachingSessions.city, likePattern),
+        ilike(teachingSessions.district, likePattern),
+      ];
+      if (matchedTeachers.length > 0) {
+        searchParts.push(
+          inArray(
+            teachingSessions.teacherUserId,
+            matchedTeachers.map((t) => t.id)
+          )
+        );
+      }
+      if (matchedSubjects.length > 0) {
+        searchParts.push(
+          inArray(
+            teachingSessions.subjectId,
+            matchedSubjects.map((s) => s.id)
+          )
+        );
+      }
+      conditions.push(or(...searchParts)!);
+    }
+
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+    const [[countRow], pagedRows] = await Promise.all([
+      db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(teachingSessions)
+        .where(whereClause),
+      db
+        .select()
+        .from(teachingSessions)
+        .where(whereClause)
+        .orderBy(asc(teachingSessions.startTime))
+        .limit(limit)
+        .offset(offset),
+    ]);
+
+    const total = countRow?.count ?? 0;
+    const enriched = await enrichSessionsForViewer(pagedRows, req.authUser);
+
+    res.json({
+      sessions: enriched,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    });
   } catch (error) {
     console.error('List teaching sessions error:', error);
     res.status(500).json({ error: 'تعذر جلب الجلسات التعليمية.' });
@@ -405,11 +652,24 @@ router.get(
     try {
       const uid = req.authUser!.id;
       const status =
-        typeof req.query.status === 'string' ? req.query.status : undefined;
+        typeof req.query.status === 'string' && req.query.status
+          ? req.query.status
+          : undefined;
       const sessionType =
-        typeof req.query.sessionType === 'string'
+        typeof req.query.sessionType === 'string' && req.query.sessionType
           ? req.query.sessionType
           : undefined;
+      const deliveryModeRaw =
+        typeof req.query.deliveryMode === 'string' && req.query.deliveryMode
+          ? req.query.deliveryMode
+          : undefined;
+      const deliveryMode = deliveryModeRaw
+        ? normalizeDeliveryMode(deliveryModeRaw)
+        : undefined;
+      const subjectId = req.query.subjectId ? Number(req.query.subjectId) : undefined;
+      const gradeId = req.query.gradeId ? Number(req.query.gradeId) : undefined;
+      const view =
+        typeof req.query.view === 'string' ? req.query.view : 'all';
 
       const [mySessionsRaw, myAvailability] = await Promise.all([
         db
@@ -427,9 +687,55 @@ router.get(
           ),
       ]);
 
+      const nowMs = Date.now();
+      const summaryCounts = {
+        all: mySessionsRaw.length,
+        onlineGroup: mySessionsRaw.filter(
+          (s) => s.sessionType === 'GROUP' && s.deliveryMode === 'ONLINE'
+        ).length,
+        onlineOneToOne: mySessionsRaw.filter(
+          (s) => s.sessionType === 'ONE_TO_ONE' && s.deliveryMode === 'ONLINE'
+        ).length,
+        offlineGroup: mySessionsRaw.filter(
+          (s) => s.sessionType === 'GROUP' && s.deliveryMode === 'IN_PERSON'
+        ).length,
+        upcoming: mySessionsRaw.filter(
+          (s) =>
+            (s.status === 'OPEN' || s.status === 'FULL') &&
+            new Date(s.endTime).getTime() >= nowMs
+        ).length,
+        completed: mySessionsRaw.filter((s) => s.status === 'COMPLETED').length,
+        cancelled: mySessionsRaw.filter((s) => s.status === 'CANCELLED').length,
+      };
+
       const filtered = mySessionsRaw.filter((s) => {
         if (status && s.status !== status) return false;
         if (sessionType && s.sessionType !== sessionType) return false;
+        if (deliveryMode && s.deliveryMode !== deliveryMode) return false;
+        if (subjectId && s.subjectId !== subjectId) return false;
+        if (gradeId && s.gradeId !== gradeId) return false;
+        if (view === 'online_group') {
+          if (s.sessionType !== 'GROUP' || s.deliveryMode !== 'ONLINE') return false;
+        } else if (view === 'online_one_to_one') {
+          if (s.sessionType !== 'ONE_TO_ONE' || s.deliveryMode !== 'ONLINE') {
+            return false;
+          }
+        } else if (view === 'offline_group') {
+          if (s.sessionType !== 'GROUP' || s.deliveryMode !== 'IN_PERSON') {
+            return false;
+          }
+        } else if (view === 'upcoming') {
+          if (
+            (s.status !== 'OPEN' && s.status !== 'FULL') ||
+            new Date(s.endTime).getTime() < nowMs
+          ) {
+            return false;
+          }
+        } else if (view === 'completed') {
+          if (s.status !== 'COMPLETED') return false;
+        } else if (view === 'cancelled') {
+          if (s.status !== 'CANCELLED') return false;
+        }
         return true;
       });
 
@@ -438,6 +744,7 @@ router.get(
       res.json({
         sessions: enriched,
         availability: myAvailability,
+        counts: summaryCounts,
       });
     } catch (error) {
       console.error('Teacher sessions mine error:', error);
@@ -456,30 +763,43 @@ router.get(
       const uid = req.authUser!.id;
       const isAdmin = req.authUser!.roles.includes('ADMIN');
       const sessionType =
-        typeof req.query.sessionType === 'string'
+        typeof req.query.sessionType === 'string' && req.query.sessionType
           ? req.query.sessionType
           : undefined;
+      const deliveryModeRaw =
+        typeof req.query.deliveryMode === 'string' && req.query.deliveryMode
+          ? req.query.deliveryMode
+          : undefined;
+      const deliveryMode = deliveryModeRaw
+        ? normalizeDeliveryMode(deliveryModeRaw)
+        : undefined;
       const statusFilter =
-        typeof req.query.status === 'string' ? req.query.status : undefined;
+        typeof req.query.status === 'string' && req.query.status
+          ? req.query.status
+          : undefined;
       const subjectId = req.query.subjectId
         ? Number(req.query.subjectId)
         : undefined;
+      const gradeId = req.query.gradeId ? Number(req.query.gradeId) : undefined;
       const sessionIdFilter = req.query.sessionId
         ? Number(req.query.sessionId)
         : undefined;
       const dateFilter =
         typeof req.query.date === 'string' ? req.query.date.trim() : undefined;
 
-      const teacherSessions = isAdmin && req.query.all === 'true'
-        ? await db.select().from(teachingSessions)
-        : await db
-            .select()
-            .from(teachingSessions)
-            .where(eq(teachingSessions.teacherUserId, uid));
+      const teacherSessions =
+        isAdmin && req.query.all === 'true'
+          ? await db.select().from(teachingSessions)
+          : await db
+              .select()
+              .from(teachingSessions)
+              .where(eq(teachingSessions.teacherUserId, uid));
 
       const matchingSessions = teacherSessions.filter((s) => {
         if (sessionType && s.sessionType !== sessionType) return false;
+        if (deliveryMode && s.deliveryMode !== deliveryMode) return false;
         if (subjectId && s.subjectId !== subjectId) return false;
+        if (gradeId && s.gradeId !== gradeId) return false;
         if (sessionIdFilter && s.id !== sessionIdFilter) return false;
         if (dateFilter) {
           const isoDate = new Date(s.startTime).toISOString().slice(0, 10);
@@ -519,9 +839,29 @@ router.get(
             .filter((v): v is number => v !== null)
         )
       );
+      const gradeIds = Array.from(
+        new Set(
+          matchingSessions
+            .map((s) => s.gradeId)
+            .filter((v): v is number => v !== null)
+        )
+      );
+      const systemIds = Array.from(
+        new Set(
+          matchingSessions
+            .map((s) => s.systemId)
+            .filter((v): v is number => v !== null)
+        )
+      );
 
       // Only permitted public student profile fields — NEVER email, phone, or passwordHash
-      const [studentUsers, studentProfileRows, subjectRows] = await Promise.all([
+      const [
+        studentUsers,
+        studentProfileRows,
+        subjectRows,
+        gradeRows,
+        systemRows,
+      ] = await Promise.all([
         db
           .select({
             id: users.id,
@@ -549,11 +889,25 @@ router.get(
               .from(subjects)
               .where(inArray(subjects.id, subjectIds))
           : Promise.resolve([]),
+        gradeIds.length > 0
+          ? db
+              .select({ id: educationalGrades.id, nameAr: educationalGrades.nameAr })
+              .from(educationalGrades)
+              .where(inArray(educationalGrades.id, gradeIds))
+          : Promise.resolve([]),
+        systemIds.length > 0
+          ? db
+              .select({ id: educationalSystems.id, nameAr: educationalSystems.nameAr })
+              .from(educationalSystems)
+              .where(inArray(educationalSystems.id, systemIds))
+          : Promise.resolve([]),
       ]);
 
       const userMap = new Map(studentUsers.map((u) => [u.id, u]));
       const profileMap = new Map(studentProfileRows.map((p) => [p.userId, p]));
       const subjectMap = new Map(subjectRows.map((s) => [s.id, s.nameAr]));
+      const gradeMap = new Map(gradeRows.map((g) => [g.id, g.nameAr]));
+      const systemMap = new Map(systemRows.map((s) => [s.id, s.nameAr]));
 
       const requests = filteredEnrs.map((e) => {
         const sess = sessionMap.get(e.sessionId)!;
@@ -564,12 +918,24 @@ router.get(
           sessionId: e.sessionId,
           sessionTitle: sess.title,
           sessionType: sess.sessionType,
+          deliveryMode: sess.deliveryMode,
+          location:
+            sess.deliveryMode === 'IN_PERSON'
+              ? formatOfflineAddress(sess) || sess.location || null
+              : null,
           sessionStartTime: sess.startTime,
           sessionEndTime: sess.endTime,
+          durationMinutes: sess.durationMinutes,
+          price: sess.price,
+          currency: sess.currency,
           sessionStatus: sess.status,
+          subjectId: sess.subjectId,
           subjectNameAr: sess.subjectId
             ? subjectMap.get(sess.subjectId) || null
             : null,
+          gradeId: sess.gradeId,
+          gradeNameAr: sess.gradeId ? gradeMap.get(sess.gradeId) || null : null,
+          systemNameAr: sess.systemId ? systemMap.get(sess.systemId) || null : null,
           status: e.status,
           notes: e.notes,
           requestedAt: e.requestedAt,
@@ -709,6 +1075,19 @@ router.post(
 
       const d = parsed.data;
       const effectiveCapacity = d.sessionType === 'ONE_TO_ONE' ? 1 : (d.capacity ?? 10);
+      const canonicalDelivery = normalizeDeliveryMode(d.deliveryMode);
+      const resolvedOfflineLocation =
+        canonicalDelivery === 'IN_PERSON'
+          ? formatOfflineAddress({
+              governorate: d.governorate,
+              city: d.city,
+              district: d.district,
+              streetName: d.streetName,
+              buildingOrCenterName: d.buildingOrCenterName,
+              locationNotes: d.locationNotes,
+              location: d.location,
+            }) || null
+          : null;
 
       if (!isSafeHttpUrl(d.meetingUrl)) {
         return res.status(400).json({ error: 'رابط الاجتماع غير صالح.' });
@@ -721,8 +1100,13 @@ router.post(
         capacity: effectiveCapacity,
         minStudents: d.sessionType === 'GROUP' ? d.minStudents ?? null : null,
         registrationDeadline: d.registrationDeadline ?? null,
-        deliveryMode: d.deliveryMode,
-        location: d.location ?? null,
+        deliveryMode: canonicalDelivery,
+        location: resolvedOfflineLocation,
+        governorate: d.governorate ?? null,
+        city: d.city ?? null,
+        district: d.district ?? null,
+        streetName: d.streetName ?? null,
+        buildingOrCenterName: d.buildingOrCenterName ?? null,
         meetingUrl: d.meetingUrl ?? null,
         price: d.price,
       });
@@ -733,6 +1117,9 @@ router.post(
       let resolvedSubjectId = d.subjectId ?? null;
       let resolvedGradeId = d.gradeId ?? null;
       let resolvedStageId = d.stageId ?? null;
+      let resolvedSystemId = d.systemId ?? null;
+      let resolvedDivisionId = d.divisionId ?? null;
+      let resolvedPathwayId = d.pathwayId ?? null;
       const resolvedCurriculumSubjectId = d.curriculumSubjectId ?? null;
 
       if (resolvedCurriculumSubjectId) {
@@ -749,6 +1136,9 @@ router.post(
         resolvedSubjectId = cs.subjectId;
         resolvedGradeId = cs.gradeId;
         resolvedStageId = cs.stageId;
+        resolvedSystemId = cs.systemId;
+        resolvedDivisionId = cs.divisionId;
+        resolvedPathwayId = cs.pathwayId;
       } else {
         if (resolvedSubjectId) {
           const [subj] = await db
@@ -762,7 +1152,11 @@ router.post(
         }
         if (resolvedGradeId) {
           const [grd] = await db
-            .select({ id: educationalGrades.id, stageId: educationalGrades.stageId })
+            .select({
+              id: educationalGrades.id,
+              stageId: educationalGrades.stageId,
+              systemId: educationalGrades.systemId,
+            })
             .from(educationalGrades)
             .where(eq(educationalGrades.id, resolvedGradeId))
             .limit(1);
@@ -770,6 +1164,7 @@ router.post(
             return res.status(400).json({ error: 'الصف الدراسي المحدد غير موجود.' });
           }
           if (!resolvedStageId) resolvedStageId = grd.stageId;
+          if (!resolvedSystemId) resolvedSystemId = grd.systemId;
         }
         if (resolvedStageId) {
           const [stg] = await db
@@ -815,7 +1210,7 @@ router.post(
         }
 
         const safeMeetingUrl =
-          d.deliveryMode === 'ONLINE'
+          canonicalDelivery === 'ONLINE'
             ? d.meetingUrl?.trim() ||
               `https://meet.jusoor.example/session-${Date.now()}`
             : null;
@@ -826,8 +1221,11 @@ router.post(
             teacherUserId: teacherId,
             subjectId: resolvedSubjectId,
             curriculumSubjectId: resolvedCurriculumSubjectId,
+            systemId: resolvedSystemId,
             gradeId: resolvedGradeId,
             stageId: resolvedStageId,
+            divisionId: resolvedDivisionId,
+            pathwayId: resolvedPathwayId,
             sessionType: d.sessionType,
             title: d.title.trim(),
             description: d.description?.trim() || null,
@@ -838,9 +1236,23 @@ router.post(
             minStudents: d.sessionType === 'GROUP' ? d.minStudents ?? null : null,
             price: d.price.toFixed(2),
             currency: d.currency.toUpperCase(),
-            deliveryMode: d.deliveryMode,
-            location:
-              d.deliveryMode === 'IN_PERSON' ? d.location?.trim() || null : null,
+            deliveryMode: canonicalDelivery,
+            location: resolvedOfflineLocation,
+            governorate:
+              canonicalDelivery === 'IN_PERSON' ? d.governorate?.trim() || null : null,
+            city: canonicalDelivery === 'IN_PERSON' ? d.city?.trim() || null : null,
+            district:
+              canonicalDelivery === 'IN_PERSON' ? d.district?.trim() || null : null,
+            streetName:
+              canonicalDelivery === 'IN_PERSON' ? d.streetName?.trim() || null : null,
+            buildingOrCenterName:
+              canonicalDelivery === 'IN_PERSON'
+                ? d.buildingOrCenterName?.trim() || null
+                : null,
+            locationNotes:
+              canonicalDelivery === 'IN_PERSON' ? d.locationNotes?.trim() || null : null,
+            isDemoLocation:
+              canonicalDelivery === 'IN_PERSON' ? Boolean(d.isDemoLocation) : false,
             meetingUrl: safeMeetingUrl,
             registrationDeadline: deadlineDt,
             status: 'OPEN',
@@ -945,15 +1357,39 @@ router.patch(
               ? new Date(d.registrationDeadline)
               : null
             : current.registrationDeadline;
-        const nextDelivery =
-          (d.deliveryMode as DeliveryMode | undefined) ||
-          (current.deliveryMode as DeliveryMode);
+        const nextDelivery = normalizeDeliveryMode(
+          d.deliveryMode ?? current.deliveryMode
+        );
+        const nextGov = d.governorate !== undefined ? d.governorate : current.governorate;
+        const nextCity = d.city !== undefined ? d.city : current.city;
+        const nextDist = d.district !== undefined ? d.district : current.district;
+        const nextStreet =
+          d.streetName !== undefined ? d.streetName : current.streetName;
+        const nextBldg =
+          d.buildingOrCenterName !== undefined
+            ? d.buildingOrCenterName
+            : current.buildingOrCenterName;
+        const nextLocNotes =
+          d.locationNotes !== undefined ? d.locationNotes : current.locationNotes;
+        const rawNextLoc = d.location !== undefined ? d.location : current.location;
         const nextLocation =
-          d.location !== undefined ? d.location : current.location;
+          nextDelivery === 'IN_PERSON'
+            ? formatOfflineAddress({
+                governorate: nextGov,
+                city: nextCity,
+                district: nextDist,
+                streetName: nextStreet,
+                buildingOrCenterName: nextBldg,
+                locationNotes: nextLocNotes,
+                location: rawNextLoc,
+              }) || null
+            : null;
         const nextMeetingUrl =
           d.meetingUrl !== undefined ? d.meetingUrl : current.meetingUrl;
         const nextPrice =
           d.price !== undefined ? d.price : Number(current.price);
+        const nextCurrency =
+          d.currency !== undefined ? d.currency.toUpperCase() : current.currency;
         const nextMinStudents =
           nextSessionType === 'ONE_TO_ONE'
             ? null
@@ -970,6 +1406,11 @@ router.patch(
           registrationDeadline: nextDeadline,
           deliveryMode: nextDelivery,
           location: nextLocation,
+          governorate: nextGov,
+          city: nextCity,
+          district: nextDist,
+          streetName: nextStreet,
+          buildingOrCenterName: nextBldg,
           meetingUrl: nextMeetingUrl,
           price: nextPrice,
         });
@@ -1013,6 +1454,11 @@ router.patch(
         let nextSubjectId = d.subjectId !== undefined ? d.subjectId : current.subjectId;
         let nextStageId = d.stageId !== undefined ? d.stageId : current.stageId;
         let nextGradeId = d.gradeId !== undefined ? d.gradeId : current.gradeId;
+        let nextSystemId = d.systemId !== undefined ? d.systemId : current.systemId;
+        let nextDivisionId =
+          d.divisionId !== undefined ? d.divisionId : current.divisionId;
+        let nextPathwayId =
+          d.pathwayId !== undefined ? d.pathwayId : current.pathwayId;
         const nextCurriculumSubjectId =
           d.curriculumSubjectId !== undefined
             ? d.curriculumSubjectId
@@ -1030,6 +1476,9 @@ router.patch(
           nextSubjectId = cs.subjectId;
           nextGradeId = cs.gradeId;
           nextStageId = cs.stageId;
+          nextSystemId = cs.systemId;
+          nextDivisionId = cs.divisionId;
+          nextPathwayId = cs.pathwayId;
         }
 
         const [saved] = await tx
@@ -1043,19 +1492,31 @@ router.patch(
                 : current.description,
             subjectId: nextSubjectId,
             curriculumSubjectId: nextCurriculumSubjectId,
+            systemId: nextSystemId,
             gradeId: nextGradeId,
             stageId: nextStageId,
+            divisionId: nextDivisionId,
+            pathwayId: nextPathwayId,
             startTime: nextStart,
             endTime: nextEnd,
             durationMinutes: calculateDurationMinutes(nextStart, nextEnd),
             capacity: nextCapacity,
             minStudents: nextMinStudents,
             price: nextPrice.toFixed(2),
+            currency: nextCurrency,
             deliveryMode: nextDelivery,
-            location:
-              nextDelivery === 'IN_PERSON'
-                ? nextLocation?.trim() || null
-                : null,
+            location: nextLocation,
+            governorate:
+              nextDelivery === 'IN_PERSON' ? nextGov?.trim() || null : null,
+            city: nextDelivery === 'IN_PERSON' ? nextCity?.trim() || null : null,
+            district:
+              nextDelivery === 'IN_PERSON' ? nextDist?.trim() || null : null,
+            streetName:
+              nextDelivery === 'IN_PERSON' ? nextStreet?.trim() || null : null,
+            buildingOrCenterName:
+              nextDelivery === 'IN_PERSON' ? nextBldg?.trim() || null : null,
+            locationNotes:
+              nextDelivery === 'IN_PERSON' ? nextLocNotes?.trim() || null : null,
             meetingUrl:
               nextDelivery === 'ONLINE'
                 ? nextMeetingUrl?.trim() ||
@@ -1071,7 +1532,8 @@ router.patch(
 
         const scheduleChanged =
           nextStart.getTime() !== current.startTime.getTime() ||
-          nextEnd.getTime() !== current.endTime.getTime();
+          nextEnd.getTime() !== current.endTime.getTime() ||
+          nextLocation !== current.location;
         if (scheduleChanged) {
           const affectedStudentIds = Array.from(
             new Set(
@@ -1085,8 +1547,8 @@ router.patch(
               affectedStudentIds.map((studentUid) => ({
                 userId: studentUid,
                 type: 'BOOKING',
-                title: 'تم تحديث موعد الجلسة',
-                body: `قام المدرّب بتحديث موعد جلسة "${saved.title}". يرجى مراجعة التفاصيل الجديدة.`,
+                title: 'تم تحديث تفاصيل الجلسة',
+                body: `قام المدرّب بتحديث موعد أو موقع جلسة "${saved.title}". يرجى مراجعة التفاصيل الجديدة.`,
                 linkUrl: '/dashboard',
               }))
             );

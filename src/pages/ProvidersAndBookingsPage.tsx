@@ -5,6 +5,7 @@ import {
   apiFetch,
   BOOKING_STATUS_LABELS_AR,
   SERVICE_TYPE_LABELS_AR,
+  formatCurrencyPrice,
 } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { TeacherSessionsBookingSection } from '../components/TeacherSessionsBookingSection';
@@ -28,10 +29,12 @@ interface ProviderItem {
   qualifications: string | null;
   yearsExperience: number;
   hourlyRate: string;
+  currency?: string;
   verificationStatus: string;
   ratingAvg: string;
   reviewsCount: number;
   availableSlots: SlotItem[];
+  openSessionsCount?: number;
 }
 
 interface BookingItem {
@@ -280,7 +283,7 @@ export function ProvidersAndBookingsPage() {
                     خبرة {p.yearsExperience} سنوات
                   </span>
                   <span className="font-mono-num font-bold text-slate-900">
-                    ${p.hourlyRate} / ساعة
+                    {formatCurrencyPrice(p.hourlyRate, p.currency || 'EGP', 'ar')} / ساعة
                   </span>
                 </div>
 
@@ -307,6 +310,18 @@ export function ProvidersAndBookingsPage() {
                         </button>
                       ))}
                     </div>
+                  </div>
+                ) : (p.openSessionsCount ?? 0) > 0 ? (
+                  <div className="text-xs flex items-center justify-between gap-2 bg-teal-50/60 border border-teal-200/80 rounded-lg px-3 py-2">
+                    <span className="font-semibold text-teal-900 tabular-nums">
+                      متاح {p.openSessionsCount} جلسة للحجز
+                    </span>
+                    <Link
+                      to={`/instructors/${p.userId}`}
+                      className="font-bold text-teal-700 hover:underline whitespace-nowrap"
+                    >
+                      عرض الجلسات
+                    </Link>
                   </div>
                 ) : (
                   <div className="text-xs text-slate-400">

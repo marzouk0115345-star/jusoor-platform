@@ -10,7 +10,12 @@ import {
   UserCheck,
   Briefcase,
 } from 'lucide-react';
-import { apiFetch, LANGUAGE_OF_INSTRUCTION_LABELS, LEVEL_LABELS_AR } from '../lib/api';
+import {
+  apiFetch,
+  LANGUAGE_OF_INSTRUCTION_LABELS,
+  LEVEL_LABELS_AR,
+  formatCurrencyPrice,
+} from '../lib/api';
 import { SafeImage } from '../components/SafeImage';
 import { TeacherSessionsBookingSection } from '../components/TeacherSessionsBookingSection';
 import { useAuth } from '../context/AuthContext';
@@ -48,8 +53,10 @@ interface InstructorPublicResponse {
       systemId: number;
       systemNameAr: string;
       systemNameEn: string;
+      divisionId?: number | null;
       divisionNameAr: string | null;
       divisionNameEn: string | null;
+      pathwayId?: number | null;
       pathwayNameAr: string | null;
       pathwayNameEn: string | null;
       languagesOffered: string[];
@@ -96,6 +103,9 @@ export function InstructorProfilePage() {
   const [data, setData] = useState<InstructorPublicResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedCurriculumSubjectId, setSelectedCurriculumSubjectId] = useState<
+    number | null
+  >(null);
 
   const loadInstructor = useCallback(async () => {
     setLoading(true);
@@ -380,20 +390,33 @@ export function InstructorProfilePage() {
               </h2>
               <p className="text-xs text-slate-600 mt-0.5">
                 {isAr
-                  ? 'التعليم العام المصري — يمكنك تصفح المراحل التعليمية لاكتشاف المواعيد المتاحة.'
-                  : 'Egyptian General Education curriculum subjects & grades taught.'}
+                  ? 'اختر أي مادة وصف لعرض الجلسات الفردية والجماعية المخصصة لها مباشرة.'
+                  : 'Select any subject & grade below to filter the sessions offered for it.'}
               </p>
             </div>
-            <Link
-              to="/educational-stages"
-              className="text-xs font-semibold text-teal-700 hover:underline"
-            >
-              {isAr ? 'استعراض المراحل التعليمية' : 'Browse Educational Stages'}
-            </Link>
+            <div className="flex items-center gap-3">
+              {selectedCurriculumSubjectId !== null && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedCurriculumSubjectId(null)}
+                  className="text-xs font-semibold text-slate-700 hover:text-slate-900 underline cursor-pointer"
+                >
+                  {isAr ? 'عرض جميع المواد' : 'Show All Subjects'}
+                </button>
+              )}
+              <Link
+                to="/educational-stages"
+                className="text-xs font-semibold text-teal-700 hover:underline"
+              >
+                {isAr ? 'استعراض المراحل التعليمية' : 'Browse Educational Stages'}
+              </Link>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
             {instructor.teachingAssignments.map((ta) => {
+              const isSelected =
+                selectedCurriculumSubjectId === ta.curriculumSubjectId;
               const langs = (ta.languagesOffered || [])
                 .map((l) =>
                   isAr
@@ -402,12 +425,30 @@ export function InstructorProfilePage() {
                 )
                 .join(' / ');
               return (
-                <div
+                <button
                   key={ta.id}
-                  className="border border-slate-200 rounded-xl p-4 space-y-1.5 bg-slate-50/50"
+                  type="button"
+                  onClick={() =>
+                    setSelectedCurriculumSubjectId(
+                      isSelected ? null : ta.curriculumSubjectId
+                    )
+                  }
+                  aria-pressed={isSelected}
+                  className={`text-start border rounded-xl p-4 space-y-1.5 transition-colors cursor-pointer ${
+                    isSelected
+                      ? 'border-teal-700 bg-teal-50/70'
+                      : 'border-slate-200 bg-slate-50/50 hover:border-teal-600/60'
+                  }`}
                 >
-                  <div className="text-sm font-bold text-slate-900">
-                    {isAr ? ta.subjectNameAr : ta.subjectNameEn}
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-bold text-slate-900">
+                      {isAr ? ta.subjectNameAr : ta.subjectNameEn}
+                    </span>
+                    {isSelected && (
+                      <span className="text-[11px] font-semibold text-teal-800">
+                        {isAr ? 'محدّد' : 'Selected'}
+                      </span>
+                    )}
                   </div>
                   <div className="text-xs text-teal-800 font-medium">
                     {isAr ? ta.systemNameAr : ta.systemNameEn} ·{' '}
@@ -422,9 +463,14 @@ export function InstructorProfilePage() {
                   )}
                   <div className="text-[11px] text-slate-500 pt-1">
                     {langs && `${isAr ? 'اللغات:' : 'Lang:'} ${langs}`}
-                    {ta.hourlyRate && ` · $${ta.hourlyRate}`}
+                    {ta.hourlyRate &&
+                      ` · ${formatCurrencyPrice(
+                        ta.hourlyRate,
+                        ta.currency || 'EGP',
+                        isAr ? 'ar' : 'en'
+                      )}`}
                   </div>
-                </div>
+                </button>
               );
             })}
           </div>
@@ -434,12 +480,15 @@ export function InstructorProfilePage() {
       {/* Live Individual & Group Sessions by This Instructor */}
       <TeacherSessionsBookingSection
         teacherId={instructor.id}
+        curriculumSubjectId={selectedCurriculumSubjectId}
+        teacherAssignments={instructor.teachingAssignments}
+        onSelectCurriculumContext={setSelectedCurriculumSubjectId}
         showTeacherName={false}
         title={isAr ? 'الجلسات الفردية والجماعية مع المدرّب' : '1:1 & Group Sessions'}
         subtitle={
           isAr
-            ? 'اختر موعداً فردياً (1:1) أو انضم إلى جلسة جماعية تفاعلية مع هذا المدرّب.'
-            : 'Choose a 1:1 slot or join a group session with this instructor.'
+            ? 'اختر موعداً فردياً (1:1) أو انضم إلى جلسة جماعية أونلاين أو أوفلاين مع هذا المدرّب.'
+            : 'Choose a 1:1 slot or join an online or offline group session with this instructor.'
         }
       />
 

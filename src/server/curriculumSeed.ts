@@ -19,6 +19,7 @@ import {
   teacherTeachingAssignments,
   teachingSessions,
 } from '../db/schema.ts';
+import { ensureStageSpecificDemoTeachersSeeded } from './demoTeachersSeed.ts';
 
 interface SubjectDef {
   slug: string;
@@ -395,7 +396,10 @@ export async function ensureEgyptianCurriculumSeeded(): Promise<void> {
     .from(academicYears)
     .where(eq(academicYears.code, '2026/2027'))
     .limit(1);
-  if (existingYears.length > 0) return;
+  if (existingYears.length > 0) {
+    await ensureStageSpecificDemoTeachersSeeded();
+    return;
+  }
 
   // 1. Ensure primary/preparatory/secondary stages exist cleanly
   const existingStages = await db.select().from(educationalStages);
@@ -1232,4 +1236,6 @@ export async function ensureEgyptianCurriculumSeeded(): Promise<void> {
   if (k12Sessions.length > 0) {
     await db.insert(teachingSessions).values(k12Sessions);
   }
+
+  await ensureStageSpecificDemoTeachersSeeded();
 }

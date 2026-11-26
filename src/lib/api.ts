@@ -104,9 +104,24 @@ export const ENROLLMENT_STATUS_LABELS_AR: Record<string, string> = {
   CANCELLED: 'ملغى',
 };
 
+export {
+  formatCurrencyPrice,
+  formatOfflineAddress,
+  isOfflineDeliveryMode,
+  type IndividualSlotStatus,
+} from './domain';
+
 export const DELIVERY_MODE_LABELS_AR: Record<string, string> = {
   ONLINE: 'عن بُعد (أونلاين)',
-  IN_PERSON: 'حضوري',
+  IN_PERSON: 'حضوري (أوفلاين)',
+  OFFLINE: 'حضوري (أوفلاين)',
+};
+
+export const INDIVIDUAL_SLOT_STATUS_LABELS_AR: Record<string, string> = {
+  AVAILABLE: 'متاحة للحجز',
+  PENDING: 'قيد المراجعة',
+  BOOKED: 'محجوزة',
+  UNAVAILABLE: 'غير متاحة',
 };
 
 export const WEEKDAY_LABELS_AR: Record<number, string> = {
@@ -130,15 +145,23 @@ export interface TeachingSessionItem {
   subjectNameAr: string | null;
   subjectNameEn: string | null;
   curriculumSubjectId?: number | null;
+  systemId?: number | null;
+  systemNameAr?: string | null;
+  systemNameEn?: string | null;
   gradeId?: number | null;
   gradeNameAr?: string | null;
   gradeNameEn?: string | null;
-  systemNameAr?: string | null;
-  systemNameEn?: string | null;
+  divisionId?: number | null;
+  divisionNameAr?: string | null;
+  divisionNameEn?: string | null;
+  pathwayId?: number | null;
+  pathwayNameAr?: string | null;
+  pathwayNameEn?: string | null;
   fieldId: number | null;
   fieldNameAr: string | null;
   stageId: number | null;
   stageNameAr: string | null;
+  stageNameEn?: string | null;
   sessionType: 'ONE_TO_ONE' | 'GROUP';
   title: string;
   description: string | null;
@@ -149,6 +172,8 @@ export interface TeachingSessionItem {
   minStudents: number | null;
   acceptedCount: number;
   pendingCount?: number;
+  hasPendingRequests?: boolean;
+  slotStatus?: 'AVAILABLE' | 'PENDING' | 'BOOKED' | 'UNAVAILABLE' | null;
   remainingSeats: number;
   isFull: boolean;
   isRegistrationOpen: boolean;
@@ -156,6 +181,13 @@ export interface TeachingSessionItem {
   currency: string;
   deliveryMode: 'ONLINE' | 'IN_PERSON';
   location: string | null;
+  governorate?: string | null;
+  city?: string | null;
+  district?: string | null;
+  streetName?: string | null;
+  buildingOrCenterName?: string | null;
+  locationNotes?: string | null;
+  isDemoLocation?: boolean;
   meetingUrl: string | null;
   registrationDeadline: string | null;
   status: 'OPEN' | 'FULL' | 'CANCELLED' | 'COMPLETED';
@@ -169,6 +201,24 @@ export interface TeachingSessionItem {
     respondedAt: string | null;
     cancelledAt: string | null;
   } | null;
+}
+
+export interface TeachingSessionsPagedResponse {
+  sessions: TeachingSessionItem[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+export interface TeacherSessionCounts {
+  all: number;
+  onlineGroup: number;
+  onlineOneToOne: number;
+  offlineGroup: number;
+  upcoming: number;
+  completed: number;
+  cancelled: number;
 }
 
 export interface StudentSessionEnrollmentItem {
@@ -322,17 +372,29 @@ export interface DiscoveredTeacherSessionItem {
   durationMinutes: number;
   capacity: number;
   acceptedCount: number;
+  pendingCount?: number;
   remainingSeats: number;
   isFull: boolean;
   isRegistrationOpen: boolean;
+  slotStatus?: 'AVAILABLE' | 'PENDING' | 'BOOKED' | 'UNAVAILABLE' | null;
   price: string;
   currency: string;
   deliveryMode: 'ONLINE' | 'IN_PERSON';
   location: string | null;
+  governorate?: string | null;
+  city?: string | null;
+  district?: string | null;
+  streetName?: string | null;
+  buildingOrCenterName?: string | null;
+  locationNotes?: string | null;
+  isDemoLocation?: boolean;
   meetingUrl: string | null;
   status: 'OPEN' | 'FULL' | 'CANCELLED' | 'COMPLETED';
   curriculumSubjectId: number | null;
   gradeId: number | null;
+  systemId?: number | null;
+  divisionId?: number | null;
+  pathwayId?: number | null;
   myEnrollment: {
     id: number;
     sessionId: number;
@@ -365,6 +427,9 @@ export interface DiscoveredTeacherItem {
   publishedCoursesCount: number;
   individualSessionsCount: number;
   groupSessionsCount: number;
+  onlineGroupSessionsCount?: number;
+  onlineIndividualSlotsCount?: number;
+  offlineGroupSessionsCount?: number;
   sessions: DiscoveredTeacherSessionItem[];
   teachingAssignmentsSummary: Array<{
     curriculumSubjectId: number;

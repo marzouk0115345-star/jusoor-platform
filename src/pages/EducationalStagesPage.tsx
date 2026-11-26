@@ -23,6 +23,9 @@ import {
   DELIVERY_MODE_LABELS_AR,
   ENROLLMENT_STATUS_LABELS_AR,
   formatSessionDateRange,
+  formatCurrencyPrice,
+  isOfflineDeliveryMode,
+  INDIVIDUAL_SLOT_STATUS_LABELS_AR,
   LANGUAGE_OF_INSTRUCTION_LABELS,
   SESSION_TYPE_LABELS_AR,
   type CurriculumDivisionItem,
@@ -1293,7 +1296,11 @@ export function EducationalStagesPage() {
                     <div className="flex flex-row lg:flex-col items-center lg:items-end justify-between gap-3 shrink-0 pt-3 lg:pt-0 border-t lg:border-t-0 border-slate-100">
                       <div className="text-end">
                         <div className="font-mono-num text-xl font-extrabold text-slate-900">
-                          ${teacher.effectivePrice}
+                          {formatCurrencyPrice(
+                            teacher.effectivePrice,
+                            teacher.currency || 'EGP',
+                            locale
+                          )}
                         </div>
                         <div className="text-[11px] text-slate-500">
                           {isAr ? 'متوسط سعر الحصة' : 'Hourly / Session rate'}
@@ -1306,8 +1313,8 @@ export function EducationalStagesPage() {
                         className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-lg whitespace-nowrap"
                       >
                         {isAr
-                          ? 'عرض الملف العام والدورات'
-                          : 'View Profile & Courses'}
+                          ? 'عرض الملف العام والجلسات'
+                          : 'View Profile & Sessions'}
                       </Link>
                     </div>
                   </div>
@@ -1333,15 +1340,17 @@ export function EducationalStagesPage() {
 
                   {/* Directly Bookable Individual & Group Sessions */}
                   <div className="space-y-2.5">
-                    <div className="text-xs font-bold text-slate-800 flex items-center justify-between">
+                    <div className="text-xs font-bold text-slate-800 flex flex-wrap items-center justify-between gap-2">
                       <span>
                         {isAr
                           ? 'الجلسات الفردية والجماعية المتاحة للحجز الآن'
                           : 'Available 1:1 & Group Sessions'}
                       </span>
-                      <span className="text-slate-500 tabular-nums">
+                      <span className="text-slate-500 tabular-nums font-medium">
                         {isAr
-                          ? `${teacher.individualSessionsCount} فردية · ${teacher.groupSessionsCount} جماعية`
+                          ? teacher.onlineGroupSessionsCount !== undefined
+                            ? `${teacher.onlineGroupSessionsCount} جماعية أونلاين · ${teacher.onlineIndividualSlotsCount ?? 0} فردية أونلاين · ${teacher.offlineGroupSessionsCount ?? 0} جماعية أوفلاين`
+                            : `${teacher.individualSessionsCount} فردية · ${teacher.groupSessionsCount} جماعية`
                           : `${teacher.individualSessionsCount} 1:1 · ${teacher.groupSessionsCount} Group`}
                       </span>
                     </div>
@@ -1353,125 +1362,182 @@ export function EducationalStagesPage() {
                           : 'No upcoming curriculum-linked sessions yet. Visit the teacher profile for more slots.'}
                       </div>
                     ) : (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        {teacher.sessions.map((sess) => {
-                          const myEnr = sess.myEnrollment;
-                          const isOwn = user?.id === sess.teacherUserId;
-                          return (
-                            <div
-                              key={sess.id}
-                              data-testid={`discovery-session-card-${sess.id}`}
-                              className="border border-slate-200 rounded-lg p-3.5 space-y-2.5 bg-slate-50/40"
-                            >
-                              <div className="flex items-center justify-between gap-2 text-xs">
-                                <span className="font-semibold text-slate-800 flex items-center gap-1">
-                                  {sess.sessionType === 'ONE_TO_ONE' ? (
-                                    <User className="w-3.5 h-3.5 text-slate-700" />
-                                  ) : (
-                                    <Users className="w-3.5 h-3.5 text-teal-700" />
-                                  )}
-                                  {isAr
-                                    ? SESSION_TYPE_LABELS_AR[sess.sessionType]
-                                    : sess.sessionType === 'ONE_TO_ONE'
-                                    ? '1:1 Individual'
-                                    : 'Group Session'}
-                                </span>
-                                <span className="font-mono-num font-bold text-slate-900">
-                                  ${sess.price}
-                                </span>
-                              </div>
-
-                              <div className="text-sm font-bold text-slate-900">
-                                {sess.title}
-                              </div>
-
-                              <div className="text-[11px] text-slate-600 space-y-1">
-                                <div className="flex items-center gap-1 font-mono-num">
-                                  <Clock className="w-3.5 h-3.5 text-teal-700 shrink-0" />
-                                  <span>
-                                    {formatSessionDateRange(
-                                      sess.startTime,
-                                      sess.endTime,
+                      <>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          {(() => {
+                            const onlineGrp = teacher.sessions.filter(
+                              (x) => x.sessionType === 'GROUP' && !isOfflineDeliveryMode(x.deliveryMode)
+                            );
+                            const online1on1 = teacher.sessions.filter(
+                              (x) => x.sessionType === 'ONE_TO_ONE' && !isOfflineDeliveryMode(x.deliveryMode)
+                            );
+                            const offlineGrp = teacher.sessions.filter(
+                              (x) => x.sessionType === 'GROUP' && isOfflineDeliveryMode(x.deliveryMode)
+                            );
+                            const picked = new Map<number, DiscoveredTeacherSessionItem>();
+                            for (const item of [
+                              ...online1on1.slice(0, 2),
+                              ...onlineGrp.slice(0, 2),
+                              ...offlineGrp.slice(0, 2),
+                              ...teacher.sessions,
+                            ]) {
+                              if (picked.size >= 6) break;
+                              picked.set(item.id, item);
+                            }
+                            return Array.from(picked.values());
+                          })().map((sess) => {
+                            const myEnr = sess.myEnrollment;
+                            const isOwn = user?.id === sess.teacherUserId;
+                            const isOffline = isOfflineDeliveryMode(sess.deliveryMode);
+                            return (
+                              <div
+                                key={sess.id}
+                                data-testid={`discovery-session-card-${sess.id}`}
+                                className="border border-slate-200 rounded-lg p-3.5 space-y-2.5 bg-slate-50/40"
+                              >
+                                <div className="flex items-center justify-between gap-2 text-xs">
+                                  <span className="font-semibold text-slate-800 flex items-center gap-1">
+                                    {sess.sessionType === 'ONE_TO_ONE' ? (
+                                      <User className="w-3.5 h-3.5 text-slate-700" />
+                                    ) : (
+                                      <Users className="w-3.5 h-3.5 text-teal-700" />
+                                    )}
+                                    {isAr
+                                      ? SESSION_TYPE_LABELS_AR[sess.sessionType]
+                                      : sess.sessionType === 'ONE_TO_ONE'
+                                      ? '1:1 Individual'
+                                      : 'Group Session'}
+                                    {sess.sessionType === 'ONE_TO_ONE' && sess.slotStatus && (
+                                      <span className="text-teal-800 mr-1">
+                                        · {INDIVIDUAL_SLOT_STATUS_LABELS_AR[sess.slotStatus] || sess.slotStatus}
+                                      </span>
+                                    )}
+                                  </span>
+                                  <span className="font-mono-num font-bold text-slate-900">
+                                    {formatCurrencyPrice(
+                                      sess.price,
+                                      sess.currency || 'EGP',
                                       locale
                                     )}
                                   </span>
                                 </div>
-                                <div className="flex items-center justify-between">
-                                  <span className="flex items-center gap-1">
-                                    {sess.deliveryMode === 'ONLINE' ? (
-                                      <Video className="w-3.5 h-3.5 text-teal-700" />
-                                    ) : (
-                                      <MapPin className="w-3.5 h-3.5 text-teal-700" />
-                                    )}
-                                    {isAr
-                                      ? DELIVERY_MODE_LABELS_AR[sess.deliveryMode]
-                                      : sess.deliveryMode}
-                                  </span>
-                                  <span className="tabular-nums font-semibold text-teal-800">
-                                    {isAr
-                                      ? `المتبقي: ${sess.remainingSeats}/${sess.capacity}`
-                                      : `${sess.remainingSeats}/${sess.capacity} seats left`}
-                                  </span>
-                                </div>
-                              </div>
 
-                              <div className="pt-2 border-t border-slate-200/70">
-                                {myEnr &&
-                                (myEnr.status === 'PENDING' ||
-                                  myEnr.status === 'ACCEPTED') ? (
-                                  <div className="flex items-center justify-between gap-2 text-xs">
-                                    <span className="font-semibold text-teal-800">
-                                      {isAr
-                                        ? ENROLLMENT_STATUS_LABELS_AR[myEnr.status]
-                                        : myEnr.status}
+                                <div className="text-sm font-bold text-slate-900">
+                                  {sess.title}
+                                </div>
+
+                                <div className="text-[11px] text-slate-600 space-y-1">
+                                  <div className="flex items-center gap-1 font-mono-num">
+                                    <Clock className="w-3.5 h-3.5 text-teal-700 shrink-0" />
+                                    <span>
+                                      {formatSessionDateRange(
+                                        sess.startTime,
+                                        sess.endTime,
+                                        locale
+                                      )}
                                     </span>
+                                    <span>({sess.durationMinutes} د)</span>
+                                  </div>
+                                  <div className="flex items-center justify-between">
+                                    <span className="flex items-center gap-1">
+                                      {!isOffline ? (
+                                        <Video className="w-3.5 h-3.5 text-teal-700" />
+                                      ) : (
+                                        <MapPin className="w-3.5 h-3.5 text-teal-700" />
+                                      )}
+                                      {isAr
+                                        ? DELIVERY_MODE_LABELS_AR[sess.deliveryMode]
+                                        : sess.deliveryMode}
+                                    </span>
+                                    <span className="tabular-nums font-semibold text-teal-800">
+                                      {isAr
+                                        ? `المتبقي: ${sess.remainingSeats}/${sess.capacity}`
+                                        : `${sess.remainingSeats}/${sess.capacity} seats left`}
+                                    </span>
+                                  </div>
+                                  {isOffline && sess.location && (
+                                    <div className="text-slate-700 font-medium pt-0.5">
+                                      العنوان: {sess.location}
+                                      {sess.isDemoLocation &&
+                                        !sess.location.includes('موقع عرض تجريبي') && (
+                                          <span className="text-slate-500 font-normal mr-1">
+                                            (موقع عرض تجريبي)
+                                          </span>
+                                        )}
+                                    </div>
+                                  )}
+                                </div>
+
+                                <div className="pt-2 border-t border-slate-200/70">
+                                  {myEnr &&
+                                  (myEnr.status === 'PENDING' ||
+                                    myEnr.status === 'ACCEPTED') ? (
+                                    <div className="flex items-center justify-between gap-2 text-xs">
+                                      <span className="font-semibold text-teal-800">
+                                        {isAr
+                                          ? ENROLLMENT_STATUS_LABELS_AR[myEnr.status]
+                                          : myEnr.status}
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleCancelMyEnrollment(myEnr.id)}
+                                        className="text-red-700 hover:underline font-semibold cursor-pointer"
+                                      >
+                                        {isAr ? 'إلغاء الطلب' : 'Cancel'}
+                                      </button>
+                                    </div>
+                                  ) : isOwn ? (
+                                    <span className="text-[11px] text-slate-500">
+                                      {isAr ? 'جلستك الخاصة' : 'Your own session'}
+                                    </span>
+                                  ) : sess.isRegistrationOpen ? (
                                     <button
                                       type="button"
-                                      onClick={() => handleCancelMyEnrollment(myEnr.id)}
-                                      className="text-red-700 hover:underline font-semibold cursor-pointer"
+                                      onClick={() => {
+                                        if (!user) {
+                                          openAuthModal();
+                                          return;
+                                        }
+                                        setBookingError(null);
+                                        setBookingSession({
+                                          session: sess,
+                                          teacherName: teacher.fullName,
+                                        });
+                                      }}
+                                      data-testid={`book-discovery-session-btn-${sess.id}`}
+                                      className="w-full py-2 bg-teal-700 hover:bg-teal-800 text-white text-xs font-semibold rounded-lg cursor-pointer"
                                     >
-                                      {isAr ? 'إلغاء الطلب' : 'Cancel'}
+                                      {sess.sessionType === 'ONE_TO_ONE'
+                                        ? isAr
+                                          ? 'طلب جلسة فردية'
+                                          : 'Request 1:1 Session'
+                                        : isAr
+                                        ? 'طلب انضمام للمجموعة'
+                                        : 'Join Group Session'}
                                     </button>
-                                  </div>
-                                ) : isOwn ? (
-                                  <span className="text-[11px] text-slate-500">
-                                    {isAr ? 'جلستك الخاصة' : 'Your own session'}
-                                  </span>
-                                ) : sess.isRegistrationOpen ? (
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      if (!user) {
-                                        openAuthModal();
-                                        return;
-                                      }
-                                      setBookingError(null);
-                                      setBookingSession({
-                                        session: sess,
-                                        teacherName: teacher.fullName,
-                                      });
-                                    }}
-                                    data-testid={`book-discovery-session-btn-${sess.id}`}
-                                    className="w-full py-2 bg-teal-700 hover:bg-teal-800 text-white text-xs font-semibold rounded-lg cursor-pointer"
-                                  >
-                                    {sess.sessionType === 'ONE_TO_ONE'
-                                      ? isAr
-                                        ? 'طلب حجز فردي (1:1)'
-                                        : 'Request 1:1 Slot'
-                                      : isAr
-                                      ? 'طلب انضمام للمجموعة'
-                                      : 'Join Group Session'}
-                                  </button>
-                                ) : (
-                                  <span className="text-xs text-slate-500">
-                                    {isAr ? 'مكتملة / مغلقة' : 'Full / Closed'}
-                                  </span>
-                                )}
+                                  ) : (
+                                    <span className="text-xs text-slate-500">
+                                      {isAr ? 'مكتملة / مغلقة' : 'Full / Closed'}
+                                    </span>
+                                  )}
+                                </div>
                               </div>
-                            </div>
-                          );
-                        })}
-                      </div>
+                            );
+                          })}
+                        </div>
+                        {teacher.sessions.length > 6 && (
+                          <div className="pt-1">
+                            <Link
+                              to={`/instructors/${teacher.teacherId}`}
+                              className="text-xs font-semibold text-teal-700 hover:underline"
+                            >
+                              {isAr
+                                ? `عرض جميع الجلسات المتاحة للمعلّم (${teacher.sessions.length} جلسة)`
+                                : `View all ${teacher.sessions.length} available sessions`}
+                            </Link>
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
                 </article>
@@ -1494,32 +1560,66 @@ export function EducationalStagesPage() {
               <span>
                 {bookingSession.session.sessionType === 'ONE_TO_ONE'
                   ? isAr
-                    ? 'طلب حجز جلسة فردية'
-                    : 'Request Individual Session'
+                    ? 'تأكيد طلب جلسة فردية'
+                    : 'Confirm 1:1 Session Request'
                   : isAr
                   ? 'طلب انضمام لجلسة جماعية'
                   : 'Request Group Session'}
               </span>
             </h3>
 
-            <div className="bg-slate-50 border border-slate-200 rounded-lg p-3.5 text-xs space-y-1 text-slate-600">
-              <div className="font-bold text-slate-900">
+            <dl className="bg-slate-50 border border-slate-200 rounded-lg p-3.5 text-xs grid grid-cols-2 gap-2 text-slate-600">
+              <div className="col-span-2 font-bold text-slate-900">
                 {bookingSession.session.title}
               </div>
               <div>
-                {isAr ? 'المعلّم:' : 'Teacher:'} {bookingSession.teacherName}
+                <span className="text-slate-500">{isAr ? 'المعلّم: ' : 'Teacher: '}</span>
+                <strong className="text-slate-900">{bookingSession.teacherName}</strong>
               </div>
-              <div className="font-mono-num">
+              {selectedSubject && (
+                <div>
+                  <span className="text-slate-500">{isAr ? 'المادة: ' : 'Subject: '}</span>
+                  <strong className="text-slate-900">
+                    {isAr ? selectedSubject.subjectNameAr : selectedSubject.subjectNameEn}
+                  </strong>
+                </div>
+              )}
+              {selectedGrade && (
+                <div>
+                  <span className="text-slate-500">{isAr ? 'الصف: ' : 'Grade: '}</span>
+                  <strong className="text-slate-900">
+                    {isAr ? selectedGrade.nameAr : selectedGrade.nameEn}
+                  </strong>
+                </div>
+              )}
+              <div>
+                <span className="text-slate-500">{isAr ? 'المدة: ' : 'Duration: '}</span>
+                <strong className="font-mono-num text-slate-900">
+                  {bookingSession.session.durationMinutes} {isAr ? 'دقيقة' : 'min'}
+                </strong>
+              </div>
+              <div className="col-span-2 font-mono-num text-slate-900 font-semibold">
                 {formatSessionDateRange(
                   bookingSession.session.startTime,
                   bookingSession.session.endTime,
                   locale
                 )}
               </div>
-              <div className="font-mono-num font-bold text-teal-800">
-                ${bookingSession.session.price}
+              {isOfflineDeliveryMode(bookingSession.session.deliveryMode) &&
+                bookingSession.session.location && (
+                  <div className="col-span-2 text-slate-700 font-medium">
+                    {isAr ? 'العنوان: ' : 'Address: '}
+                    {bookingSession.session.location}
+                  </div>
+                )}
+              <div className="col-span-2 font-mono-num font-bold text-teal-800 pt-1 border-t border-slate-200">
+                {formatCurrencyPrice(
+                  bookingSession.session.price,
+                  bookingSession.session.currency || 'EGP',
+                  locale
+                )}
               </div>
-            </div>
+            </dl>
 
             <form onSubmit={handleBookSessionSubmit} className="space-y-3">
               <div>

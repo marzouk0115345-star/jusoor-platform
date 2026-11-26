@@ -26,8 +26,15 @@ import {
   skills,
   teachingSessions,
   sessionEnrollments,
+  subjects,
+  educationalGrades,
+  educationalSystems,
 } from '../../db/schema.ts';
 import { requireAuth, type AuthRequest } from '../auth.ts';
+import {
+  formatOfflineAddress,
+  isOfflineDeliveryMode,
+} from '../../lib/domain.ts';
 import {
   getAiConfigurationStatus,
   generateLearningDiagnosis,
@@ -145,12 +152,30 @@ router.get('/dashboard', requireAuth, async (req: AuthRequest, res) => {
           sessionType: teachingSessions.sessionType,
           startTime: teachingSessions.startTime,
           endTime: teachingSessions.endTime,
+          durationMinutes: teachingSessions.durationMinutes,
+          price: teachingSessions.price,
+          currency: teachingSessions.currency,
           deliveryMode: teachingSessions.deliveryMode,
           location: teachingSessions.location,
+          governorate: teachingSessions.governorate,
+          city: teachingSessions.city,
+          district: teachingSessions.district,
+          streetName: teachingSessions.streetName,
+          buildingOrCenterName: teachingSessions.buildingOrCenterName,
+          locationNotes: teachingSessions.locationNotes,
+          isDemoLocation: teachingSessions.isDemoLocation,
           meetingUrl: teachingSessions.meetingUrl,
           sessionStatus: teachingSessions.status,
           enrollmentStatus: sessionEnrollments.status,
+          notes: sessionEnrollments.notes,
+          requestedAt: sessionEnrollments.requestedAt,
+          teacherUserId: teachingSessions.teacherUserId,
           teacherName: users.fullName,
+          subjectNameAr: subjects.nameAr,
+          subjectNameEn: subjects.nameEn,
+          gradeNameAr: educationalGrades.nameAr,
+          gradeNameEn: educationalGrades.nameEn,
+          systemNameAr: educationalSystems.nameAr,
         })
         .from(sessionEnrollments)
         .innerJoin(
@@ -158,6 +183,9 @@ router.get('/dashboard', requireAuth, async (req: AuthRequest, res) => {
           eq(sessionEnrollments.sessionId, teachingSessions.id)
         )
         .innerJoin(users, eq(teachingSessions.teacherUserId, users.id))
+        .leftJoin(subjects, eq(teachingSessions.subjectId, subjects.id))
+        .leftJoin(educationalGrades, eq(teachingSessions.gradeId, educationalGrades.id))
+        .leftJoin(educationalSystems, eq(teachingSessions.systemId, educationalSystems.id))
         .where(eq(sessionEnrollments.studentUserId, uid))
         .orderBy(desc(sessionEnrollments.requestedAt)),
       db
@@ -167,13 +195,33 @@ router.get('/dashboard', requireAuth, async (req: AuthRequest, res) => {
     ]);
 
     const myLessonEnrollments = myLessonEnrollmentsRaw.map((row) => {
-      const canSeeDetails =
+      const canSeeMeetingLink =
         row.enrollmentStatus === 'ACCEPTED' && row.sessionStatus !== 'CANCELLED';
+      const isOffline = isOfflineDeliveryMode(row.deliveryMode);
+      const resolvedLocation = isOffline
+        ? row.location ||
+          formatOfflineAddress({
+            governorate: row.governorate,
+            city: row.city,
+            district: row.district,
+            streetName: row.streetName,
+            buildingOrCenterName: row.buildingOrCenterName,
+            locationNotes: row.locationNotes,
+          }) ||
+          null
+        : null;
       return {
         ...row,
-        location:
-          row.deliveryMode === 'IN_PERSON' && canSeeDetails ? row.location : null,
-        meetingUrl: canSeeDetails ? row.meetingUrl : null,
+        currency: row.currency || 'EGP',
+        location: resolvedLocation,
+        governorate: isOffline ? row.governorate : null,
+        city: isOffline ? row.city : null,
+        district: isOffline ? row.district : null,
+        streetName: isOffline ? row.streetName : null,
+        buildingOrCenterName: isOffline ? row.buildingOrCenterName : null,
+        locationNotes: isOffline ? row.locationNotes : null,
+        isDemoLocation: Boolean(row.isDemoLocation),
+        meetingUrl: canSeeMeetingLink ? row.meetingUrl : null,
       };
     });
 

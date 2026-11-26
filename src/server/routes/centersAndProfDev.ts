@@ -23,6 +23,7 @@ import {
   teacherTeachingAssignments,
   subjects,
   educationalGrades,
+  educationalStages,
   educationalSystems,
   secondaryDivisions,
   baccalaureatePathways,
@@ -517,14 +518,19 @@ router.get('/instructors/:instructorId', optionalAuth, async (req, res) => {
             subjectId: teacherTeachingAssignments.subjectId,
             subjectNameAr: subjects.nameAr,
             subjectNameEn: subjects.nameEn,
+            stageId: educationalGrades.stageId,
+            stageNameAr: educationalStages.nameAr,
+            stageNameEn: educationalStages.nameEn,
             gradeId: teacherTeachingAssignments.gradeId,
             gradeNameAr: educationalGrades.nameAr,
             gradeNameEn: educationalGrades.nameEn,
             systemId: teacherTeachingAssignments.systemId,
             systemNameAr: educationalSystems.nameAr,
             systemNameEn: educationalSystems.nameEn,
+            divisionId: teacherTeachingAssignments.divisionId,
             divisionNameAr: secondaryDivisions.nameAr,
             divisionNameEn: secondaryDivisions.nameEn,
+            pathwayId: teacherTeachingAssignments.pathwayId,
             pathwayNameAr: baccalaureatePathways.nameAr,
             pathwayNameEn: baccalaureatePathways.nameEn,
             languagesOffered: teacherTeachingAssignments.languagesOfferedJson,
@@ -539,6 +545,10 @@ router.get('/instructors/:instructorId', optionalAuth, async (req, res) => {
           .innerJoin(
             educationalGrades,
             eq(teacherTeachingAssignments.gradeId, educationalGrades.id)
+          )
+          .innerJoin(
+            educationalStages,
+            eq(educationalGrades.stageId, educationalStages.id)
           )
           .innerJoin(
             educationalSystems,

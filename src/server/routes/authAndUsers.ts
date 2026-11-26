@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import crypto from 'node:crypto';
 import { z } from 'zod';
-import { eq, asc } from 'drizzle-orm';
+import { eq, asc, and, notLike } from 'drizzle-orm';
 import { db } from '../../db/index.ts';
 import {
   users,
@@ -84,7 +84,12 @@ router.get('/auth/demo-accounts', async (_req, res) => {
         fullName: users.fullName,
       })
       .from(users)
-      .where(eq(users.isDemo, true))
+      .where(
+        and(
+          eq(users.isDemo, true),
+          notLike(users.email, '%@teachers.demo.jusoor.edu')
+        )
+      )
       .orderBy(asc(users.id));
 
     const enriched = await Promise.all(

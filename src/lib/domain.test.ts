@@ -354,4 +354,95 @@ test('discovered teachers filtering and sorting supports teachers without course
   assert.equal(noCourseTeacherStillReturned[0].publishedCoursesCount, 0);
 });
 
+import {
+  normalizeDeliveryMode,
+  isOfflineDeliveryMode,
+  formatOfflineAddress,
+  formatCurrencyPrice,
+  computeIndividualSlotStatus,
+} from './domain.ts';
+
+test('individual slot status, offline address formatting, currency formatting, and OFFLINE normalization work cleanly', () => {
+  assert.equal(normalizeDeliveryMode('OFFLINE'), 'IN_PERSON');
+  assert.equal(normalizeDeliveryMode('IN_PERSON'), 'IN_PERSON');
+  assert.equal(normalizeDeliveryMode('ONLINE'), 'ONLINE');
+  assert.equal(isOfflineDeliveryMode('OFFLINE'), true);
+  assert.equal(isOfflineDeliveryMode('IN_PERSON'), true);
+  assert.equal(isOfflineDeliveryMode('ONLINE'), false);
+
+  assert.equal(formatCurrencyPrice(180, 'EGP', 'ar'), '180 ج.م');
+  assert.equal(formatCurrencyPrice(180, 'EGP', 'en'), '180 EGP');
+  assert.equal(formatCurrencyPrice(0, 'EGP', 'ar'), 'مجانية');
+  assert.equal(formatCurrencyPrice(25, 'USD', 'ar'), '$25');
+
+  const addr = formatOfflineAddress({
+    buildingOrCenterName: 'سنتر المعرفة التعليمي',
+    streetName: 'شارع مصطفى النحاس',
+    district: 'مدينة نصر',
+    city: 'القاهرة',
+    governorate: 'القاهرة',
+    locationNotes: 'موقع عرض تجريبي',
+  });
+  assert.ok(addr.includes('سنتر المعرفة التعليمي'));
+  assert.ok(addr.includes('مدينة نصر'));
+  assert.ok(addr.includes('القاهرة'));
+
+  assert.equal(
+    computeIndividualSlotStatus({
+      sessionType: 'ONE_TO_ONE',
+      status: 'OPEN',
+      acceptedCount: 0,
+      pendingCount: 0,
+      startTime: '2027-06-01T15:00:00Z',
+      now: '2027-05-01T10:00:00Z',
+    }),
+    'AVAILABLE'
+  );
+  assert.equal(
+    computeIndividualSlotStatus({
+      sessionType: 'ONE_TO_ONE',
+      status: 'OPEN',
+      acceptedCount: 0,
+      pendingCount: 1,
+      startTime: '2027-06-01T15:00:00Z',
+      now: '2027-05-01T10:00:00Z',
+    }),
+    'PENDING'
+  );
+  assert.equal(
+    computeIndividualSlotStatus({
+      sessionType: 'ONE_TO_ONE',
+      status: 'FULL',
+      acceptedCount: 1,
+      pendingCount: 0,
+      startTime: '2027-06-01T15:00:00Z',
+      now: '2027-05-01T10:00:00Z',
+    }),
+    'BOOKED'
+  );
+  assert.equal(
+    computeIndividualSlotStatus({
+      sessionType: 'ONE_TO_ONE',
+      status: 'CANCELLED',
+      acceptedCount: 0,
+      pendingCount: 0,
+      startTime: '2027-06-01T15:00:00Z',
+      now: '2027-05-01T10:00:00Z',
+    }),
+    'UNAVAILABLE'
+  );
+  assert.equal(
+    computeIndividualSlotStatus({
+      sessionType: 'GROUP',
+      status: 'OPEN',
+      acceptedCount: 0,
+      pendingCount: 0,
+      startTime: '2027-06-01T15:00:00Z',
+      now: '2027-05-01T10:00:00Z',
+    }),
+    null
+  );
+});
+
+
 

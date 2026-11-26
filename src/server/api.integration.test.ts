@@ -1171,7 +1171,7 @@ test('JUSOOR end-to-end API & RBAC integration suite', async () => {
   const filterCurrSessions = await api(
     `/teaching-sessions?curriculumSubjectId=${p4MathCs.id}&gradeId=${
       findGrade('primary-4').id
-    }`
+    }&teacherId=${regTeacherC.data.user.id}`
   );
   assert.equal(filterCurrSessions.status, 200);
   assert.ok(
@@ -1241,5 +1241,346 @@ test('JUSOOR end-to-end API & RBAC integration suite', async () => {
   );
   assert.equal(copyVersionRes.status, 201);
   assert.ok(copyVersionRes.data.copiedCount >= 180);
+
+  // =========================================================================
+  // 15. Stage-Specific Teacher Coverage (All 9 Discovery Contexts + Isolation)
+  // =========================================================================
+  const fetchTeachersForContext = async (
+    gradeSlug: string,
+    subjectSlug: string,
+    opts?: { divisionCode?: string; pathwayCode?: string }
+  ) => {
+    const grade = findGrade(gradeSlug);
+    const qs = new URLSearchParams({ gradeId: String(grade.id) });
+    if (opts?.divisionCode) qs.set('divisionId', String(findDiv(opts.divisionCode).id));
+    if (opts?.pathwayCode) qs.set('pathwayId', String(findPath(opts.pathwayCode).id));
+    const subRes = await api(`/curriculum/subjects?${qs.toString()}`);
+    assert.equal(subRes.status, 200);
+    const cs = subRes.data.subjects.find(
+      (s: { subjectSlug: string }) => s.subjectSlug === subjectSlug
+    );
+    assert.ok(cs, `Missing curriculum subject ${subjectSlug} in ${gradeSlug}`);
+    const tRes = await api(`/curriculum/subjects/${cs.id}/teachers?limit=20`);
+    assert.equal(tRes.status, 200);
+    return tRes.data.teachers as Array<{
+      teacherId: number;
+      fullName: string;
+      publishedCoursesCount: number;
+      verificationStatus: string;
+    }>;
+  };
+
+  // All 9 required student discovery queries must have >= 3 distinct active teachers
+  const prim4Eng = await fetchTeachersForContext('primary-4', 'eg-english');
+  const prim5Math = await fetchTeachersForContext('primary-5', 'eg-mathematics');
+  const prep2Eng = await fetchTeachersForContext('prep-2', 'eg-english-first-foreign');
+  const prep3Sci = await fetchTeachersForContext('prep-3', 'eg-science');
+  const sec1IntSci = await fetchTeachersForContext('gen-sec-1', 'eg-integrated-science');
+  const sec2SciPhys = await fetchTeachersForContext('gen-sec-2', 'eg-physics', {
+    divisionCode: 'GEN_SEC_2_SCIENTIFIC',
+  });
+  const sec3LitGeo = await fetchTeachersForContext('gen-sec-3', 'eg-geography', {
+    divisionCode: 'GEN_SEC_3_LITERARY',
+  });
+  const bacc2EngAi = await fetchTeachersForContext('bacc-2', 'eg-programming-ai', {
+    pathwayCode: 'BACC_2_ENG',
+  });
+  const bacc3MedBio = await fetchTeachersForContext('bacc-3', 'eg-biology-adv', {
+    pathwayCode: 'BACC_3_MED',
+  });
+
+  for (const [label, list] of [
+    ['Primary G4 English', prim4Eng],
+    ['Primary G5 Math', prim5Math],
+    ['Prep G2 English', prep2Eng],
+    ['Prep G3 Science', prep3Sci],
+    ['Gen Sec G1 Integrated Science', sec1IntSci],
+    ['Gen Sec G2 Scientific Physics', sec2SciPhys],
+    ['Gen Sec G3 Literary Geography', sec3LitGeo],
+    ['Bacc G2 Eng Programming & AI', bacc2EngAi],
+    ['Bacc G3 Med Adv Biology', bacc3MedBio],
+  ] as const) {
+    assert.ok(
+      list.length >= 3,
+      `${label} must have >= 3 teachers, got ${list.length}`
+    );
+  }
+
+  // Strict stage isolation checks: no overlap across stages/systems
+  const idsOf = (list: Array<{ teacherId: number }>) =>
+    new Set(list.map((t) => t.teacherId));
+
+  const primEngIds = idsOf(prim4Eng);
+  const prepEngIds = idsOf(prep2Eng);
+  for (const id of primEngIds) {
+    assert.ok(!prepEngIds.has(id), 'Primary English teacher must not appear in Prep English');
+  }
+
+  const sec1Eng = await fetchTeachersForContext('gen-sec-1', 'eg-first-foreign-lang');
+  const bacc1Eng = await fetchTeachersForContext('bacc-1', 'eg-first-foreign-lang');
+  const sec1EngIds = idsOf(sec1Eng);
+  const bacc1EngIds = idsOf(bacc1Eng);
+  for (const id of sec1EngIds) {
+    assert.ok(!prepEngIds.has(id), 'Secondary English teacher must not appear in Prep');
+    assert.ok(!bacc1EngIds.has(id), 'Gen Sec English teacher must not appear in Baccalaureate');
+  }
+
+  // Zero-course discoverability & honest PENDING status on newly seeded stage teacher
+  const noCourseStageTeacher = prep2Eng.find((t) => t.publishedCoursesCount === 0);
+  assert.ok(noCourseStageTeacher, 'Prep G2 English must include a 0-course teacher');
+  assert.equal(noCourseStageTeacher.verificationStatus, 'PENDING');
+
+  // =========================================================================
+  // 16. Teacher Sessions System, Demo Seeding (7+7+7), SQL Filters & 1:1 Flow
+  // =========================================================================
+  const seededP4MathTeacher = p4MathTeachers.data.teachers.find(
+    (t: {
+      onlineGroupSessionsCount?: number;
+      onlineIndividualSlotsCount?: number;
+      offlineGroupSessionsCount?: number;
+      sessions?: unknown[];
+    }) =>
+      (t.onlineGroupSessionsCount ?? 0) >= 7 &&
+      (t.onlineIndividualSlotsCount ?? 0) >= 7 &&
+      (t.offlineGroupSessionsCount ?? 0) >= 7
+  );
+  assert.ok(
+    seededP4MathTeacher,
+    'Primary 4 Math must include a seeded stage teacher with 7 online group + 7 online 1:1 + 7 offline group sessions'
+  );
+
+  // Inspect all sessions of that seeded teacher for Primary 4 Math via paginated SQL API
+  const seededTeacherSessions = await api(
+    `/teaching-sessions?teacherId=${seededP4MathTeacher.teacherId}&curriculumSubjectId=${p4MathCs.id}&limit=50`
+  );
+  assert.equal(seededTeacherSessions.status, 200);
+  assert.ok(seededTeacherSessions.data.total >= 21);
+  const seededOnlineGroup = seededTeacherSessions.data.sessions.filter(
+    (s: { sessionType: string; deliveryMode: string }) =>
+      s.sessionType === 'GROUP' && s.deliveryMode === 'ONLINE'
+  );
+  const seededOnlineOneToOne = seededTeacherSessions.data.sessions.filter(
+    (s: { sessionType: string; deliveryMode: string }) =>
+      s.sessionType === 'ONE_TO_ONE' && s.deliveryMode === 'ONLINE'
+  );
+  const seededOfflineGroup = seededTeacherSessions.data.sessions.filter(
+    (s: { sessionType: string; deliveryMode: string }) =>
+      s.sessionType === 'GROUP' && s.deliveryMode === 'IN_PERSON'
+  );
+  assert.ok(seededOnlineGroup.length >= 7);
+  assert.ok(seededOnlineOneToOne.length >= 7);
+  assert.ok(seededOfflineGroup.length >= 7);
+
+  for (const offSess of seededOfflineGroup) {
+    assert.ok(
+      typeof offSess.location === 'string' && offSess.location.trim().length > 10,
+      'Offline session must publicly display complete physical address'
+    );
+    assert.ok(offSess.governorate, 'Offline session must include governorate');
+    assert.ok(offSess.city, 'Offline session must include city');
+    assert.equal(offSess.isDemoLocation, true);
+    assert.equal(offSess.currency, 'EGP');
+    assert.equal(offSess.meetingUrl, null);
+  }
+
+  // Test SQL filters & pagination (deliveryMode=OFFLINE alias, gradeId, minPrice/maxPrice, page & limit)
+  const p4GradeId = findGrade('primary-4').id;
+  const offlineFilterPage1 = await api(
+    `/teaching-sessions?gradeId=${p4GradeId}&deliveryMode=OFFLINE&sessionType=GROUP&minPrice=50&maxPrice=500&page=1&limit=5`
+  );
+  assert.equal(offlineFilterPage1.status, 200);
+  assert.ok(offlineFilterPage1.data.total >= 7);
+  assert.ok(offlineFilterPage1.data.totalPages >= 2);
+  assert.equal(offlineFilterPage1.data.sessions.length, 5);
+  assert.ok(
+    offlineFilterPage1.data.sessions.every(
+      (s: {
+        deliveryMode: string;
+        sessionType: string;
+        gradeId: number;
+        price: number;
+        location: string | null;
+      }) =>
+        s.deliveryMode === 'IN_PERSON' &&
+        s.sessionType === 'GROUP' &&
+        s.gradeId === p4GradeId &&
+        Number(s.price) >= 50 &&
+        Number(s.price) <= 500 &&
+        Boolean(s.location && s.location.length > 5)
+    )
+  );
+
+  const offlineFilterPage2 = await api(
+    `/teaching-sessions?gradeId=${p4GradeId}&deliveryMode=OFFLINE&sessionType=GROUP&minPrice=50&maxPrice=500&page=2&limit=5`
+  );
+  assert.equal(offlineFilterPage2.status, 200);
+  assert.ok(offlineFilterPage2.data.sessions.length >= 1);
+  assert.notEqual(
+    offlineFilterPage1.data.sessions[0].id,
+    offlineFilterPage2.data.sessions[0].id
+  );
+
+  // Division/Pathway SQL filter check (Gen Sec 2 Scientific Physics)
+  const sec2SciDiv = findDiv('GEN_SEC_2_SCIENTIFIC');
+  const sec2SciSessions = await api(
+    `/teaching-sessions?gradeId=${findGrade('gen-sec-2').id}&divisionId=${sec2SciDiv.id}&limit=10`
+  );
+  assert.equal(sec2SciSessions.status, 200);
+  assert.ok(sec2SciSessions.data.total >= 21);
+  assert.ok(
+    sec2SciSessions.data.sessions.every(
+      (s: { divisionId: number }) => s.divisionId === sec2SciDiv.id
+    )
+  );
+
+  // E2E QA Teacher (Teacher C) + Offline Group & 1:1 Online Request -> Teacher Requests -> Accept -> Dashboard "جلساتي"
+  const qaTeacherCOnlineRes = await api('/teaching-sessions', {
+    method: 'POST',
+    token: regTeacherC.data.token,
+    body: {
+      sessionType: 'ONE_TO_ONE',
+      title: `حصة فردية أونلاين اختبارية ${suffix}`,
+      description: 'مراجعة فردية أونلاين للوحدة الثانية.',
+      curriculumSubjectId: p4MathCs.id,
+      startTime: futureDate(21, 16),
+      endTime: futureDate(21, 17),
+      price: 165,
+      currency: 'EGP',
+      deliveryMode: 'ONLINE',
+      meetingUrl: 'https://meet.jusoor.example/qa-1on1-flow',
+    },
+  });
+  assert.equal(qaTeacherCOnlineRes.status, 201);
+  const qa1on1Id: number = qaTeacherCOnlineRes.data.session.id;
+
+  const qaTeacherCOfflineRes = await api('/teaching-sessions', {
+    method: 'POST',
+    token: regTeacherC.data.token,
+    body: {
+      sessionType: 'GROUP',
+      title: `مجموعة حضورية اختبارية ${suffix}`,
+      description: 'مراجعة شاملة في السنتر.',
+      curriculumSubjectId: p4MathCs.id,
+      startTime: futureDate(22, 17),
+      endTime: futureDate(22, 19),
+      capacity: 12,
+      minStudents: 2,
+      price: 110,
+      currency: 'EGP',
+      deliveryMode: 'OFFLINE',
+      governorate: 'القاهرة',
+      city: 'مدينة نصر',
+      district: 'المنطقة السادسة',
+      streetName: 'شارع عباس العقاد',
+      buildingOrCenterName: 'مركز النور التعليمي (قاعة اختبارية)',
+      locationNotes: 'الدور الثالث - قاعة 2',
+      isDemoLocation: true,
+    },
+  });
+  assert.equal(qaTeacherCOfflineRes.status, 201);
+  const qaOfflineId: number = qaTeacherCOfflineRes.data.session.id;
+  assert.equal(qaTeacherCOfflineRes.data.session.deliveryMode, 'IN_PERSON');
+  assert.ok(
+    qaTeacherCOfflineRes.data.session.location.includes('القاهرة') &&
+      qaTeacherCOfflineRes.data.session.location.includes('شارع عباس العقاد')
+  );
+
+  // Student submits a 1:1 request AND an offline group request
+  const stu1on1Req = await api(`/teaching-sessions/${qa1on1Id}/enroll`, {
+    method: 'POST',
+    token: studentToken,
+    body: { notes: 'أرغب في مراجعة القسمة المطولة' },
+  });
+  assert.equal(stu1on1Req.status, 201);
+  const stu1on1EnrId: number = stu1on1Req.data.enrollment.id;
+
+  const stuOfflineReq = await api(`/teaching-sessions/${qaOfflineId}/enroll`, {
+    method: 'POST',
+    token: studentToken,
+    body: { notes: 'حجز مقعد في المجموعة الحضورية' },
+  });
+  assert.equal(stuOfflineReq.status, 201);
+
+  // Slot status should reflect PENDING while awaiting decision
+  const pendingCheck = await api(`/teaching-sessions/${qa1on1Id}`, {
+    token: studentToken,
+  });
+  assert.equal(pendingCheck.status, 200);
+  assert.equal(pendingCheck.data.session.slotStatus, 'PENDING');
+  assert.equal(pendingCheck.data.session.meetingUrl, null);
+
+  // Student dashboard ("جلساتي") shows both pending items, full offline physical address, EGP currency, and null meetingUrl
+  const stuDashBefore = await api('/dashboard', { token: studentToken });
+  assert.equal(stuDashBefore.status, 200);
+  const dash1on1Before = stuDashBefore.data.lessonEnrollments.find(
+    (e: { sessionId: number }) => e.sessionId === qa1on1Id
+  );
+  const dashOfflineBefore = stuDashBefore.data.lessonEnrollments.find(
+    (e: { sessionId: number }) => e.sessionId === qaOfflineId
+  );
+  assert.ok(dash1on1Before, '1:1 request must appear in student dashboard');
+  assert.equal(dash1on1Before.enrollmentStatus, 'PENDING');
+  assert.equal(dash1on1Before.currency, 'EGP');
+  assert.equal(dash1on1Before.meetingUrl, null);
+  assert.ok(dashOfflineBefore, 'Offline group request must appear in student dashboard');
+  assert.ok(
+    dashOfflineBefore.location.includes('شارع عباس العقاد'),
+    'Offline address must remain visible even while enrollment is PENDING'
+  );
+
+  // Teacher C sees the 1:1 request in "طلبات الجلسات الفردية" with subject, grade, price, and notes
+  const teacherCRequests = await api(
+    '/teaching-sessions/teacher/requests?sessionType=ONE_TO_ONE&status=PENDING',
+    { token: regTeacherC.data.token }
+  );
+  assert.equal(teacherCRequests.status, 200);
+  const foundReq = teacherCRequests.data.requests.find(
+    (r: { id: number }) => r.id === stu1on1EnrId
+  );
+  assert.ok(foundReq);
+  assert.equal(Number(foundReq.price), 165);
+  assert.equal(foundReq.currency, 'EGP');
+  assert.ok(foundReq.subjectNameAr);
+  assert.ok(foundReq.gradeNameAr);
+
+  // Teacher C checks /teaching-sessions/mine with category counts & view filtering
+  const teacherCMine = await api('/teaching-sessions/mine?view=offline_group', {
+    token: regTeacherC.data.token,
+  });
+  assert.equal(teacherCMine.status, 200);
+  assert.ok(teacherCMine.data.counts.onlineOneToOne >= 2);
+  assert.ok(teacherCMine.data.counts.offlineGroup >= 1);
+  assert.ok(
+    teacherCMine.data.sessions.some((s: { id: number }) => s.id === qaOfflineId)
+  );
+
+  // Teacher C accepts the 1:1 request -> slot becomes FULL / BOOKED & student sees meetingUrl
+  const accept1on1Res = await api(`/session-enrollments/${stu1on1EnrId}/accept`, {
+    method: 'POST',
+    token: regTeacherC.data.token,
+  });
+  assert.equal(accept1on1Res.status, 200);
+  assert.equal(accept1on1Res.data.sessionStatus, 'FULL');
+
+  // Second student attempting to book the already-booked 1:1 slot must be rejected (409)
+  const lateStudentBooking = await api(`/teaching-sessions/${qa1on1Id}/enroll`, {
+    method: 'POST',
+    token: studentTokens[0],
+    body: { notes: 'محاولة متأخرة' },
+  });
+  assert.equal(lateStudentBooking.status, 409);
+
+  const stuDashAfter = await api('/dashboard', { token: studentToken });
+  assert.equal(stuDashAfter.status, 200);
+  const dash1on1After = stuDashAfter.data.lessonEnrollments.find(
+    (e: { sessionId: number }) => e.sessionId === qa1on1Id
+  );
+  assert.equal(dash1on1After.enrollmentStatus, 'ACCEPTED');
+  assert.equal(
+    dash1on1After.meetingUrl,
+    'https://meet.jusoor.example/qa-1on1-flow'
+  );
 });
+
+
 
