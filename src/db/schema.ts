@@ -433,6 +433,33 @@ export const providerProfiles = pgTable(
 // 3. EDUCATIONAL CENTERS & STAFF
 // ============================================================================
 
+export interface CenterWorkingHourDay {
+  dayOfWeek: number; // 0 (Sun) .. 6 (Sat)
+  isOpen: boolean;
+  openTime: string; // HH:mm
+  closeTime: string; // HH:mm
+  note?: string;
+}
+
+export interface CenterBookingPolicies {
+  allowStudentBookings: boolean;
+  requireApproval: boolean;
+  minBookingNoticeHours: number;
+  allowCancellation: boolean;
+  minCancellationNoticeHours: number;
+  maxReschedulesPerBooking: number;
+  policySummary: string;
+}
+
+export interface CenterNotificationSettings {
+  notifyNewStudentRegistration: boolean;
+  notifyNewCourseEnrollment: boolean;
+  notifyBookingRequests: boolean;
+  notifyCancellations: boolean;
+  notifyPaymentUpdates: boolean;
+  notifyStaffActivities: boolean;
+}
+
 export const centers = pgTable('centers', {
   id: serial('id').primaryKey(),
   ownerUserId: integer('owner_user_id')
@@ -443,11 +470,28 @@ export const centers = pgTable('centers', {
   description: text('description').notNull(),
   city: text('city').notNull(),
   country: text('country').notNull(),
+  governorate: text('governorate'),
+  street: text('street'),
+  buildingDetails: text('building_details'),
+  address: text('address'),
+  latitude: numeric('latitude', { precision: 10, scale: 7 }),
+  longitude: numeric('longitude', { precision: 10, scale: 7 }),
+  phone: text('phone'),
+  secondaryPhone: text('secondary_phone'),
   website: text('website'),
   logoUrl: text('logo_url'),
   bannerUrl: text('banner_url'),
   verificationStatus: text('verification_status').notNull().default('PENDING'),
+  workingHoursJson: jsonb('working_hours_json')
+    .$type<CenterWorkingHourDay[]>()
+    .notNull()
+    .default([]),
+  bookingPoliciesJson: jsonb('booking_policies_json')
+    .$type<CenterBookingPolicies | null>(),
+  notificationSettingsJson: jsonb('notification_settings_json')
+    .$type<CenterNotificationSettings | null>(),
   createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
 });
 
 export const centerMembers = pgTable(
@@ -462,13 +506,195 @@ export const centerMembers = pgTable(
       .references(() => users.id, { onDelete: 'cascade' }),
     memberRole: text('member_role').notNull().default('STAFF'), // OWNER | MANAGER | INSTRUCTOR | STAFF
     jobTitle: text('job_title').notNull().default(''),
+    employmentType: text('employment_type').notNull().default('PART_TIME'), // FULL_TIME | PART_TIME | CONTRACT | FREELANCE
     permissionsJson: jsonb('permissions_json').$type<string[]>().notNull().default([]),
-    status: text('status').notNull().default('ACTIVE'),
+    status: text('status').notNull().default('ACTIVE'), // ACTIVE | INACTIVE
+    notes: text('notes'),
     joinedAt: timestamp('joined_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
   },
   (table) => [
     uniqueIndex('center_members_center_user_uq').on(table.centerId, table.userId),
     index('center_members_user_idx').on(table.userId),
+  ]
+);
+
+export const centerBranches = pgTable(
+  'center_branches',
+  {
+    id: serial('id').primaryKey(),
+    centerId: integer('center_id')
+      .notNull()
+      .references(() => centers.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    city: text('city').notNull(),
+    address: text('address').notNull(),
+    phone: text('phone'),
+    isMain: boolean('is_main').notNull().default(false),
+    isActive: boolean('is_active').notNull().default(true),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (table) => [index('center_branches_center_idx').on(table.centerId)]
+);
+
+export const centerRooms = pgTable(
+  'center_rooms',
+  {
+    id: serial('id').primaryKey(),
+    centerId: integer('center_id')
+      .notNull()
+      .references(() => centers.id, { onDelete: 'cascade' }),
+    branchId: integer('branch_id')
+      .notNull()
+      .references(() => centerBranches.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    roomNumber: text('room_number').notNull().default(''),
+    capacity: integer('capacity').notNull().default(20),
+    equipmentNotes: text('equipment_notes'),
+    isActive: boolean('is_active').notNull().default(true),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (table) => [
+    index('center_rooms_center_idx').on(table.centerId),
+    index('center_rooms_branch_idx').on(table.branchId),
+  ]
+);
+
+export const centerTeacherAssignments = pgTable(
+  'center_teacher_assignments',
+  {
+    id: serial('id').primaryKey(),
+    centerId: integer('center_id')
+      .notNull()
+      .references(() => centers.id, { onDelete: 'cascade' }),
+    memberId: integer('member_id')
+      .notNull()
+      .references(() => centerMembers.id, { onDelete: 'cascade' }),
+    teacherUserId: integer('teacher_user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    subjectId: integer('subject_id')
+      .notNull()
+      .references(() => subjects.id, { onDelete: 'cascade' }),
+    stageId: integer('stage_id')
+      .notNull()
+      .references(() => educationalStages.id, { onDelete: 'cascade' }),
+    systemId: integer('system_id').references(() => educationalSystems.id, {
+      onDelete: 'set null',
+    }),
+    gradeId: integer('grade_id').references(() => educationalGrades.id, {
+      onDelete: 'set null',
+    }),
+    divisionId: integer('division_id').references(() => secondaryDivisions.id, {
+      onDelete: 'set null',
+    }),
+    pathwayId: integer('pathway_id').references(() => baccalaureatePathways.id, {
+      onDelete: 'set null',
+    }),
+    notes: text('notes'),
+    isActive: boolean('is_active').notNull().default(true),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (table) => [
+    index('center_teacher_assignments_center_idx').on(table.centerId),
+    index('center_teacher_assignments_member_idx').on(table.memberId),
+    index('center_teacher_assignments_teacher_idx').on(table.teacherUserId),
+  ]
+);
+
+export const centerStudents = pgTable(
+  'center_students',
+  {
+    id: serial('id').primaryKey(),
+    centerId: integer('center_id')
+      .notNull()
+      .references(() => centers.id, { onDelete: 'cascade' }),
+    studentUserId: integer('student_user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    phone: text('phone'),
+    stageId: integer('stage_id').references(() => educationalStages.id, {
+      onDelete: 'set null',
+    }),
+    gradeId: integer('grade_id').references(() => educationalGrades.id, {
+      onDelete: 'set null',
+    }),
+    guardianName: text('guardian_name'),
+    guardianPhone: text('guardian_phone'),
+    notes: text('notes'),
+    status: text('status').notNull().default('ACTIVE'), // ACTIVE | INACTIVE
+    joinedAt: timestamp('joined_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('center_students_center_user_uq').on(table.centerId, table.studentUserId),
+    index('center_students_center_idx').on(table.centerId),
+    index('center_students_user_idx').on(table.studentUserId),
+  ]
+);
+
+export const centerAttendance = pgTable(
+  'center_attendance',
+  {
+    id: serial('id').primaryKey(),
+    centerId: integer('center_id')
+      .notNull()
+      .references(() => centers.id, { onDelete: 'cascade' }),
+    studentUserId: integer('student_user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    courseId: integer('course_id').references(() => courses.id, {
+      onDelete: 'set null',
+    }),
+    teacherUserId: integer('teacher_user_id').references(() => users.id, {
+      onDelete: 'set null',
+    }),
+    attendanceDate: text('attendance_date').notNull(), // YYYY-MM-DD
+    status: text('status').notNull().default('PRESENT'), // PRESENT | ABSENT | LATE | EXCUSED
+    notes: text('notes'),
+    recordedByUserId: integer('recorded_by_user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (table) => [
+    index('center_attendance_center_student_idx').on(table.centerId, table.studentUserId),
+    index('center_attendance_date_idx').on(table.attendanceDate),
+  ]
+);
+
+export const centerStudentPayments = pgTable(
+  'center_student_payments',
+  {
+    id: serial('id').primaryKey(),
+    centerId: integer('center_id')
+      .notNull()
+      .references(() => centers.id, { onDelete: 'cascade' }),
+    studentUserId: integer('student_user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    courseId: integer('course_id').references(() => courses.id, {
+      onDelete: 'set null',
+    }),
+    amount: numeric('amount', { precision: 10, scale: 2 }).notNull().default('0.00'),
+    currency: text('currency').notNull().default('EGP'),
+    status: text('status').notNull().default('PAID'), // PAID | PENDING | PARTIAL | OVERDUE | REFUNDED
+    paymentMethod: text('payment_method').notNull().default('CASH'), // CASH | CARD | TRANSFER | WALLET
+    referenceCode: text('reference_code'),
+    notes: text('notes'),
+    paidAt: text('paid_at').notNull(), // YYYY-MM-DD
+    recordedByUserId: integer('recorded_by_user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (table) => [
+    index('center_student_payments_center_student_idx').on(
+      table.centerId,
+      table.studentUserId
+    ),
   ]
 );
 
@@ -567,16 +793,33 @@ export const courses = pgTable(
     stageId: integer('stage_id').references(() => educationalStages.id, {
       onDelete: 'set null',
     }),
+    systemId: integer('system_id').references(() => educationalSystems.id, {
+      onDelete: 'set null',
+    }),
+    gradeId: integer('grade_id').references(() => educationalGrades.id, {
+      onDelete: 'set null',
+    }),
+    divisionId: integer('division_id').references(() => secondaryDivisions.id, {
+      onDelete: 'set null',
+    }),
+    pathwayId: integer('pathway_id').references(() => baccalaureatePathways.id, {
+      onDelete: 'set null',
+    }),
     title: text('title').notNull(),
     slug: text('slug').notNull().unique(),
     subtitle: text('subtitle').notNull(),
     description: text('description').notNull(),
+    customFieldName: text('custom_field_name'),
+    targetAudience: text('target_audience'),
     level: text('level').notNull().default('BEGINNER'), // BEGINNER | INTERMEDIATE | ADVANCED
     language: text('language').notNull().default('ar'),
     price: numeric('price', { precision: 10, scale: 2 }).notNull().default('0.00'),
     currency: text('currency').notNull().default('USD'),
+    maxStudents: integer('max_students'),
+    enrollmentStatus: text('enrollment_status').notNull().default('OPEN'), // OPEN | PAUSED | CLOSED
     thumbnailUrl: text('thumbnail_url'),
-    status: text('status').notNull().default('DRAFT'), // DRAFT | PUBLISHED | ARCHIVED
+    coverImageKey: text('cover_image_key'),
+    status: text('status').notNull().default('DRAFT'), // DRAFT | PUBLISHED | PAUSED | CLOSED | ARCHIVED
     isDemo: boolean('is_demo').notNull().default(false),
     createdAt: timestamp('created_at').notNull().defaultNow(),
     updatedAt: timestamp('updated_at').notNull().defaultNow(),
@@ -595,6 +838,7 @@ export const courseLessons = pgTable(
     courseId: integer('course_id')
       .notNull()
       .references(() => courses.id, { onDelete: 'cascade' }),
+    moduleTitle: text('module_title'),
     title: text('title').notNull(),
     content: text('content').notNull(),
     videoUrl: text('video_url'),

@@ -1,9 +1,12 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { Building2, Plus, Users, BookOpen, X } from 'lucide-react';
-import { apiFetch } from '../lib/api';
+import { apiFetch, getCenterVerificationLabelAr } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { SafeImage } from '../components/SafeImage';
+import { PageHeader } from '../components/ui/PageHeader';
+import { StateBanner } from '../components/ui/StateBanner';
+import { EmptyState } from '../components/ui/EmptyState';
+import { LoadingSkeleton } from '../components/ui/LoadingSkeleton';
 
 interface CenterMemberItem {
   id: number;
@@ -20,10 +23,19 @@ interface CenterItem {
   id: number;
   name: string;
   description: string;
+  governorate?: string | null;
   city: string;
   country: string;
+  street?: string | null;
+  buildingDetails?: string | null;
+  address?: string | null;
+  fullAddress?: string | null;
+  googleMapsUrl?: string | null;
+  phone?: string | null;
   bannerUrl: string | null;
+  logoUrl?: string | null;
   verificationStatus: string;
+  verificationLabelAr?: string;
   ownerUserId: number;
   ownerName: string;
   canManage?: boolean;
@@ -179,366 +191,423 @@ export function CentersPage() {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 space-y-8">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="font-display text-2xl sm:text-3xl font-extrabold text-slate-900">
-            المراكز والأكاديميات التعليمية
-          </h1>
-          <p className="text-sm text-slate-600 mt-1">
-            مراكز تدريب معتمدة تدير فرق المدرّبين والموظفين والدورات والبرامج التطبيقية.
-          </p>
-        </div>
+    <div>
+      <PageHeader
+        kicker="الأكاديميات ومراكز التدريب المعتمدة"
+        title="المراكز والأكاديميات التعليمية"
+        subtitle="مراكز تدريب معتمدة تدير فرق المدرّبين والموظفين والدورات والبرامج التطبيقية."
+        actions={
+          canCreateCenter && (
+            <button
+              type="button"
+              onClick={() => setShowCreate(true)}
+              className="btn-jusoor-primary px-4 py-2.5 text-xs sm:text-sm inline-flex items-center gap-2 cursor-pointer"
+            >
+              <i className="bi bi-plus-lg" aria-hidden="true" />
+              <span>تسجيل مركز تعليمي</span>
+            </button>
+          )
+        }
+      />
 
-        {canCreateCenter && (
-          <button
-            type="button"
-            onClick={() => setShowCreate(true)}
-            className="px-4 py-2.5 bg-teal-700 hover:bg-teal-800 text-white text-sm font-semibold rounded-lg flex items-center gap-2 cursor-pointer self-start"
-          >
-            <Plus className="w-4 h-4" />
-            <span>تسجيل مركز تعليمي</span>
-          </button>
+      <div className="container-xxl px-3 px-sm-4 py-4 py-md-5 space-y-5">
+        {feedback && (
+          <StateBanner
+            variant="success"
+            message={feedback}
+            onDismiss={() => setFeedback(null)}
+          />
         )}
-      </div>
+        {error && (
+          <StateBanner
+            variant="error"
+            message={error}
+            onDismiss={() => setError(null)}
+          />
+        )}
 
-      {feedback && (
-        <div className="p-4 rounded-xl bg-teal-50 border border-teal-200 text-sm text-teal-900">
-          {feedback}
-        </div>
-      )}
-      {error && (
-        <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-sm text-red-800">
-          {error}
-        </div>
-      )}
-
-      {loading ? (
-        <div className="h-64 bg-white border border-slate-200 rounded-xl animate-pulse" />
-      ) : centers.length === 0 ? (
-        <div className="bg-white border border-slate-200 rounded-xl p-12 text-center space-y-2">
-          <Building2 className="w-8 h-8 text-slate-400 mx-auto" />
-          <div className="font-semibold text-slate-900">
-            لا توجد مراكز تعليمية مسجلة بعد
-          </div>
-        </div>
-      ) : (
-        <div className="space-y-6">
-          {centers.map((center) => {
-            const canManage =
-              Boolean(center.canManage) ||
-              Boolean(
-                user &&
-                  (center.ownerUserId === user.id || user.roles.includes('ADMIN'))
-              );
-            return (
-              <div
-                key={center.id}
-                className="bg-white border border-slate-200 rounded-xl overflow-hidden grid grid-cols-1 lg:grid-cols-12"
-              >
-                <div className="lg:col-span-4 aspect-[16/9] lg:aspect-auto bg-slate-100">
-                  <SafeImage
-                    src={center.bannerUrl}
-                    alt={center.name}
-                    fallbackTitle={center.name}
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-                <div className="lg:col-span-8 p-6 space-y-4">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <div className="text-xs text-slate-500">
-                        {center.city} · {center.country} ·{' '}
-                        {center.verificationStatus === 'VERIFIED'
-                          ? 'مركز موثّق'
-                          : 'قيد المراجعة'}
-                      </div>
-                      <h2 className="font-display text-xl font-bold text-slate-900 mt-1">
-                        {center.name}
-                      </h2>
+        {loading ? (
+          <LoadingSkeleton variant="list" count={3} />
+        ) : centers.length === 0 ? (
+          <EmptyState
+            icon="bi-building"
+            title="لا توجد مراكز تعليمية مسجلة بعد"
+            description="يمكن لمالكي المراكز إنشاء ملف أكاديمي وإضافة المدرّبين والدورات."
+          />
+        ) : (
+          <div className="space-y-5">
+            {centers.map((center) => {
+              const canManage =
+                Boolean(center.canManage) ||
+                Boolean(
+                  user &&
+                    (center.ownerUserId === user.id || user.roles.includes('ADMIN'))
+                );
+              return (
+                <div key={center.id} className="jusoor-card overflow-hidden">
+                  <div className="row g-0">
+                    <div className="col-12 col-lg-4">
+                      <Link
+                        to={`/centers/${center.id}`}
+                        className="block aspect-[16/9] lg:aspect-auto h-full bg-[#EEF4FA] overflow-hidden"
+                      >
+                        <SafeImage
+                          src={center.bannerUrl}
+                          alt={center.name}
+                          fallbackTitle={center.name}
+                          className="w-full h-full object-cover hover:scale-[1.02] transition-transform duration-300"
+                        />
+                      </Link>
                     </div>
-                    <div className="flex items-center gap-4 text-xs text-slate-600 tabular-nums">
-                      <span>{center.stats.coursesCount} دورات</span>
-                      <span>{center.stats.membersCount} أعضاء</span>
-                      <span>{center.stats.totalEnrollments} متعلّمين</span>
-                    </div>
-                  </div>
 
-                  <p className="text-sm text-slate-600 leading-relaxed">
-                    {center.description}
-                  </p>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-3 border-t border-slate-100">
-                    <div>
-                      <div className="text-xs font-bold text-slate-800 flex items-center gap-1.5 mb-2">
-                        <Users className="w-3.5 h-3.5 text-teal-700" />
-                        <span>فريق المركز والمدرّبون</span>
-                      </div>
-                      <div className="space-y-2 text-xs text-slate-600">
-                        {center.members.map((m) => {
-                          const isEditingThis =
-                            editingMember?.centerId === center.id &&
-                            editingMember?.memberId === m.id;
-                          return (
-                            <div
-                              key={m.id}
-                              className="p-2 rounded-lg bg-slate-50 border border-slate-100 space-y-2"
+                    <div className="col-12 col-lg-8 p-4 sm:p-6 space-y-4">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="space-y-1">
+                          <div className="text-xs text-[#64748B] flex flex-wrap items-center gap-2">
+                            <span className="inline-flex items-center gap-1">
+                              <i className="bi bi-geo-alt text-[#247BA0]" aria-hidden="true" />
+                              <span>
+                                {center.fullAddress || `${center.city} · ${center.country}`}
+                              </span>
+                            </span>
+                            {center.verificationStatus === 'VERIFIED' ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#E8F8F5] text-[#0F766E] border border-[#B2EAE0] font-bold text-[11px]">
+                                <i className="bi bi-patch-check-fill" aria-hidden="true" />
+                                <span>مركز موثوق</span>
+                              </span>
+                            ) : (
+                              <span
+                                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md border font-semibold text-[11px] ${
+                                  center.verificationStatus === 'REJECTED'
+                                    ? 'bg-[#FEF2F2] text-[#991B1B] border-[#FECACA]'
+                                    : 'bg-[#FFFBEB] text-[#B45309] border-[#FDE68A]'
+                                }`}
+                              >
+                                {center.verificationLabelAr ||
+                                  getCenterVerificationLabelAr(center.verificationStatus)}
+                              </span>
+                            )}
+                          </div>
+                          <h2 className="font-display text-xl font-bold text-[#102A43] mt-1 mb-0">
+                            <Link
+                              to={`/centers/${center.id}`}
+                              className="text-[#102A43] hover:text-[#247BA0] transition-colors"
                             >
-                              <div className="flex items-start justify-between gap-2">
-                                <div className="min-w-0">
-                                  {m.hasInstructorProfile ? (
-                                    <Link
-                                      to={`/instructors/${m.userId}`}
-                                      className="font-semibold text-teal-800 hover:underline block truncate"
-                                    >
-                                      {m.fullName}
-                                    </Link>
-                                  ) : (
-                                    <div className="font-semibold text-slate-900 truncate">
-                                      {m.fullName}
+                              {center.name}
+                            </Link>
+                          </h2>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2.5 text-xs text-[#64748B] tabular-nums">
+                          <span>{center.stats.coursesCount} دورات</span>
+                          <span>{center.stats.membersCount} أعضاء</span>
+                          <span>{center.stats.totalEnrollments} متعلّمين</span>
+                          <Link
+                            to={`/centers/${center.id}`}
+                            className="btn-jusoor-outline px-3 py-1.5 text-xs inline-flex items-center gap-1.5"
+                          >
+                            <i className="bi bi-building" aria-hidden="true" />
+                            <span>عرض ملف المركز</span>
+                          </Link>
+                          {center.googleMapsUrl && (
+                            <a
+                              href={center.googleMapsUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="btn-jusoor-outline px-2.5 py-1.5 text-xs inline-flex items-center gap-1"
+                              title="عرض الموقع على خرائط جوجل"
+                            >
+                              <i className="bi bi-map text-[#0F766E]" aria-hidden="true" />
+                              <span>الخريطة</span>
+                            </a>
+                          )}
+                          {canManage && (
+                            <Link
+                              to={`/centers/${center.id}/dashboard`}
+                              className="btn-jusoor-primary px-3 py-1.5 text-xs inline-flex items-center gap-1.5"
+                            >
+                              <i className="bi bi-building-gear" aria-hidden="true" />
+                              <span>لوحة إدارة المركز</span>
+                            </Link>
+                          )}
+                        </div>
+                      </div>
+
+                      <p className="text-sm text-[#172B4D] leading-relaxed m-0">
+                        {center.description}
+                      </p>
+
+                      <div className="row g-4 pt-3 border-t border-[#EDF2F7]">
+                        <div className="col-12 col-md-6">
+                          <div className="text-xs font-bold text-[#102A43] flex items-center gap-1.5 mb-2">
+                            <i className="bi bi-people text-[#0F766E]" aria-hidden="true" />
+                            <span>فريق المركز والمدرّبون</span>
+                          </div>
+                          <div className="space-y-2 text-xs text-[#64748B]">
+                            {center.members.map((m) => {
+                              const isEditingThis =
+                                editingMember?.centerId === center.id &&
+                                editingMember?.memberId === m.id;
+                              return (
+                                <div
+                                  key={m.id}
+                                  className="jusoor-subcard p-2.5 space-y-2"
+                                >
+                                  <div className="flex items-start justify-between gap-2">
+                                    <div className="min-w-0">
+                                      {m.hasInstructorProfile ? (
+                                        <Link
+                                          to={`/instructors/${m.userId}`}
+                                          className="font-bold text-[#0F766E] hover:underline block truncate"
+                                        >
+                                          {m.fullName}
+                                        </Link>
+                                      ) : (
+                                        <div className="font-bold text-[#102A43] truncate">
+                                          {m.fullName}
+                                        </div>
+                                      )}
+                                      <div className="text-[#172B4D] mt-0.5" dir="auto">
+                                        {m.jobTitle?.trim() ||
+                                          CENTER_ROLE_LABELS_AR[m.memberRole] ||
+                                          m.memberRole}
+                                      </div>
                                     </div>
-                                  )}
-                                  <div
-                                    className="text-slate-600 mt-0.5"
-                                    dir="auto"
-                                  >
-                                    {m.jobTitle?.trim() ||
-                                      CENTER_ROLE_LABELS_AR[m.memberRole] ||
-                                      m.memberRole}
+                                    <div className="flex items-center gap-2 shrink-0">
+                                      <span className="text-[11px] text-[#64748B]">
+                                        {CENTER_ROLE_LABELS_AR[m.memberRole] ||
+                                          m.memberRole}
+                                      </span>
+                                      {canManage && (
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            setEditingMember({
+                                              centerId: center.id,
+                                              memberId: m.id,
+                                              memberName: m.fullName,
+                                              memberRole: m.memberRole,
+                                              jobTitle: m.jobTitle || '',
+                                            })
+                                          }
+                                          className="text-[11px] font-semibold text-[#247BA0] hover:underline cursor-pointer"
+                                        >
+                                          تعديل المسمى
+                                        </button>
+                                      )}
+                                    </div>
                                   </div>
-                                </div>
-                                <div className="flex items-center gap-2 shrink-0">
-                                  <span className="text-[11px] text-slate-500">
-                                    {CENTER_ROLE_LABELS_AR[m.memberRole] ||
-                                      m.memberRole}
-                                  </span>
-                                  {canManage && (
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        setEditingMember({
-                                          centerId: center.id,
-                                          memberId: m.id,
-                                          memberName: m.fullName,
-                                          memberRole: m.memberRole,
-                                          jobTitle: m.jobTitle || '',
-                                        })
-                                      }
-                                      className="text-[11px] font-semibold text-teal-700 hover:underline cursor-pointer"
+
+                                  {isEditingThis && editingMember && (
+                                    <form
+                                      onSubmit={handleUpdateMember}
+                                      className="pt-2 border-t border-[#DCE5F0] space-y-2"
                                     >
-                                      تعديل المسمى
-                                    </button>
+                                      <div>
+                                        <label
+                                          htmlFor={`edit-job-title-${m.id}`}
+                                          className="block text-[11px] font-semibold text-[#172B4D] mb-1"
+                                        >
+                                          Job Title / Specialization — المسمى الوظيفي أو التخصص
+                                        </label>
+                                        <input
+                                          id={`edit-job-title-${m.id}`}
+                                          type="text"
+                                          required
+                                          value={editingMember.jobTitle}
+                                          onChange={(e) =>
+                                            setEditingMember({
+                                              ...editingMember,
+                                              jobTitle: e.target.value,
+                                            })
+                                          }
+                                          placeholder="e.g. Mathematics Teacher"
+                                          className="jusoor-input w-full px-2.5 py-1.5 text-xs"
+                                          dir="auto"
+                                        />
+                                      </div>
+                                      {editingMember.memberRole !== 'OWNER' && (
+                                        <select
+                                          value={editingMember.memberRole}
+                                          onChange={(e) =>
+                                            setEditingMember({
+                                              ...editingMember,
+                                              memberRole: e.target.value,
+                                            })
+                                          }
+                                          aria-label="دور العضو في المركز"
+                                          className="jusoor-select w-full px-2.5 py-1.5 text-xs"
+                                        >
+                                          <option value="INSTRUCTOR">مدرّب</option>
+                                          <option value="STAFF">موظف مركز</option>
+                                          <option value="MANAGER">مدير فرعي</option>
+                                        </select>
+                                      )}
+                                      <div className="flex items-center gap-2">
+                                        <button
+                                          type="submit"
+                                          className="btn-jusoor-primary px-3 py-1 text-[11px] cursor-pointer"
+                                        >
+                                          حفظ التعديل
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => setEditingMember(null)}
+                                          className="btn-jusoor-outline px-3 py-1 text-[11px] cursor-pointer"
+                                        >
+                                          إلغاء
+                                        </button>
+                                      </div>
+                                    </form>
                                   )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        <div className="col-12 col-md-6">
+                          <div className="text-xs font-bold text-[#102A43] flex items-center gap-1.5 mb-2">
+                            <i className="bi bi-book text-[#0F766E]" aria-hidden="true" />
+                            <span>دورات المركز</span>
+                          </div>
+                          <div className="space-y-1.5 text-xs">
+                            {center.courses.map((c) => (
+                              <Link
+                                key={c.id}
+                                to={`/courses/${c.id}`}
+                                className="block font-semibold text-[#247BA0] hover:underline truncate"
+                              >
+                                {c.title}
+                              </Link>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+
+                      {canManage && (
+                        <div className="pt-3 border-t border-[#EDF2F7]">
+                          {activeCenterId === center.id ? (
+                            <form
+                              onSubmit={(e) => handleAddMember(e, center.id)}
+                              className="jusoor-subcard p-3.5 space-y-3"
+                            >
+                              <div className="row g-2.5">
+                                <div className="col-12 col-sm-4">
+                                  <label
+                                    htmlFor={`member-email-${center.id}`}
+                                    className="block text-[11px] font-semibold text-[#172B4D] mb-1"
+                                  >
+                                    البريد الإلكتروني للعضو
+                                  </label>
+                                  <input
+                                    id={`member-email-${center.id}`}
+                                    type="email"
+                                    required
+                                    value={staffEmail}
+                                    onChange={(e) => setStaffEmail(e.target.value)}
+                                    placeholder="teacher@example.com"
+                                    className="jusoor-input w-full px-3 py-1.5 text-xs"
+                                  />
+                                </div>
+                                <div className="col-12 col-sm-4">
+                                  <label
+                                    htmlFor={`member-role-${center.id}`}
+                                    className="block text-[11px] font-semibold text-[#172B4D] mb-1"
+                                  >
+                                    الدور الإداري بالمركز
+                                  </label>
+                                  <select
+                                    id={`member-role-${center.id}`}
+                                    value={staffRole}
+                                    onChange={(e) => setStaffRole(e.target.value)}
+                                    className="jusoor-select w-full px-3 py-1.5 text-xs"
+                                  >
+                                    <option value="INSTRUCTOR">مدرّب</option>
+                                    <option value="STAFF">موظف مركز</option>
+                                    <option value="MANAGER">مدير فرعي</option>
+                                  </select>
+                                </div>
+                                <div className="col-12 col-sm-4">
+                                  <label
+                                    htmlFor={`member-job-title-${center.id}`}
+                                    className="block text-[11px] font-semibold text-[#172B4D] mb-1"
+                                  >
+                                    Job Title / Specialization
+                                  </label>
+                                  <input
+                                    id={`member-job-title-${center.id}`}
+                                    type="text"
+                                    required
+                                    value={staffJobTitle}
+                                    onChange={(e) =>
+                                      setStaffJobTitle(e.target.value)
+                                    }
+                                    placeholder="e.g. Mathematics Teacher"
+                                    className="jusoor-input w-full px-3 py-1.5 text-xs"
+                                    dir="auto"
+                                  />
                                 </div>
                               </div>
-
-                              {isEditingThis && editingMember && (
-                                <form
-                                  onSubmit={handleUpdateMember}
-                                  className="pt-2 border-t border-slate-200 space-y-2"
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="submit"
+                                  className="btn-jusoor-primary px-4 py-1.5 text-xs cursor-pointer"
                                 >
-                                  <div>
-                                    <label
-                                      htmlFor={`edit-job-title-${m.id}`}
-                                      className="block text-[11px] font-medium text-slate-700 mb-1"
-                                    >
-                                      Job Title / Specialization — المسمى الوظيفي أو التخصص
-                                    </label>
-                                    <input
-                                      id={`edit-job-title-${m.id}`}
-                                      type="text"
-                                      required
-                                      value={editingMember.jobTitle}
-                                      onChange={(e) =>
-                                        setEditingMember({
-                                          ...editingMember,
-                                          jobTitle: e.target.value,
-                                        })
-                                      }
-                                      placeholder="e.g. Mathematics Teacher"
-                                      className="w-full px-2.5 py-1.5 text-xs border border-slate-300 rounded-lg bg-white"
-                                      dir="auto"
-                                    />
-                                  </div>
-                                  {editingMember.memberRole !== 'OWNER' && (
-                                    <select
-                                      value={editingMember.memberRole}
-                                      onChange={(e) =>
-                                        setEditingMember({
-                                          ...editingMember,
-                                          memberRole: e.target.value,
-                                        })
-                                      }
-                                      aria-label="دور العضو في المركز"
-                                      className="w-full px-2.5 py-1.5 text-xs border border-slate-300 rounded-lg bg-white"
-                                    >
-                                      <option value="INSTRUCTOR">مدرّب</option>
-                                      <option value="STAFF">موظف مركز</option>
-                                      <option value="MANAGER">مدير فرعي</option>
-                                    </select>
-                                  )}
-                                  <div className="flex items-center gap-2">
-                                    <button
-                                      type="submit"
-                                      className="px-3 py-1 bg-teal-700 text-white text-[11px] font-semibold rounded-lg cursor-pointer"
-                                    >
-                                      حفظ التعديل
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => setEditingMember(null)}
-                                      className="px-3 py-1 border border-slate-300 text-[11px] rounded-lg cursor-pointer"
-                                    >
-                                      إلغاء
-                                    </button>
-                                  </div>
-                                </form>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    <div>
-                      <div className="text-xs font-bold text-slate-800 flex items-center gap-1.5 mb-2">
-                        <BookOpen className="w-3.5 h-3.5 text-teal-700" />
-                        <span>دورات المركز</span>
-                      </div>
-                      <div className="space-y-1 text-xs">
-                        {center.courses.map((c) => (
-                          <Link
-                            key={c.id}
-                            to={`/courses/${c.id}`}
-                            className="block text-teal-700 hover:underline truncate"
-                          >
-                            {c.title}
-                          </Link>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-
-                  {canManage && (
-                    <div className="pt-3 border-t border-slate-100">
-                      {activeCenterId === center.id ? (
-                        <form
-                          onSubmit={(e) => handleAddMember(e, center.id)}
-                          className="space-y-3 bg-slate-50 p-3.5 rounded-lg border border-slate-200"
-                        >
-                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                            <div>
-                              <label
-                                htmlFor={`member-email-${center.id}`}
-                                className="block text-[11px] font-medium text-slate-700 mb-1"
-                              >
-                                البريد الإلكتروني للعضو
-                              </label>
-                              <input
-                                id={`member-email-${center.id}`}
-                                type="email"
-                                required
-                                value={staffEmail}
-                                onChange={(e) => setStaffEmail(e.target.value)}
-                                placeholder="teacher@example.com"
-                                className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-lg bg-white"
-                              />
-                            </div>
-                            <div>
-                              <label
-                                htmlFor={`member-role-${center.id}`}
-                                className="block text-[11px] font-medium text-slate-700 mb-1"
-                              >
-                                الدور الإداري بالمركز
-                              </label>
-                              <select
-                                id={`member-role-${center.id}`}
-                                value={staffRole}
-                                onChange={(e) => setStaffRole(e.target.value)}
-                                className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-lg bg-white"
-                              >
-                                <option value="INSTRUCTOR">مدرّب</option>
-                                <option value="STAFF">موظف مركز</option>
-                                <option value="MANAGER">مدير فرعي</option>
-                              </select>
-                            </div>
-                            <div>
-                              <label
-                                htmlFor={`member-job-title-${center.id}`}
-                                className="block text-[11px] font-medium text-slate-700 mb-1"
-                              >
-                                Job Title / Specialization
-                              </label>
-                              <input
-                                id={`member-job-title-${center.id}`}
-                                type="text"
-                                required
-                                value={staffJobTitle}
-                                onChange={(e) => setStaffJobTitle(e.target.value)}
-                                placeholder="e.g. Mathematics Teacher"
-                                className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-lg bg-white"
-                                dir="auto"
-                              />
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <button
-                              type="submit"
-                              className="px-4 py-1.5 bg-teal-700 hover:bg-teal-800 text-white text-xs font-semibold rounded-lg cursor-pointer"
-                            >
-                              إضافة العضو للمركز
-                            </button>
+                                  إضافة العضو للمركز
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setActiveCenterId(null);
+                                    setStaffJobTitle('');
+                                  }}
+                                  className="btn-jusoor-outline px-3 py-1.5 text-xs cursor-pointer"
+                                >
+                                  إلغاء
+                                </button>
+                              </div>
+                            </form>
+                          ) : (
                             <button
                               type="button"
                               onClick={() => {
-                                setActiveCenterId(null);
-                                setStaffJobTitle('');
+                                setActiveCenterId(center.id);
+                                setError(null);
                               }}
-                              className="px-3 py-1.5 border border-slate-300 bg-white text-xs rounded-lg cursor-pointer"
+                              className="text-xs font-bold text-[#0F766E] hover:underline cursor-pointer"
                             >
-                              إلغاء
+                              + إضافة مدرّب أو موظف وتحديد مسماه الوظيفي
                             </button>
-                          </div>
-                        </form>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setActiveCenterId(center.id);
-                            setError(null);
-                          }}
-                          className="text-xs font-semibold text-teal-700 hover:underline cursor-pointer"
-                        >
-                          + إضافة مدرّب أو موظف وتحديد مسماه الوظيفي
-                        </button>
+                          )}
+                        </div>
                       )}
                     </div>
-                  )}
+                  </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
+              );
+            })}
+          </div>
+        )}
+      </div>
 
       {showCreate && (
         <div
-          className="fixed inset-0 z-50 bg-slate-900/50 flex items-center justify-center p-4"
+          className="fixed inset-0 z-50 bg-[#102A43]/60 backdrop-blur-xs flex items-center justify-center p-4"
           role="dialog"
           aria-modal="true"
         >
-          <div className="bg-white border border-slate-200 rounded-xl w-full max-w-md p-6 space-y-4">
-            <div className="flex items-center justify-between pb-2 border-b border-slate-200">
-              <h2 className="font-display text-lg font-bold text-slate-900">
+          <div className="jusoor-card w-full max-w-md p-5 sm:p-6 space-y-4">
+            <div className="flex items-center justify-between pb-2 border-b border-[#DCE5F0]">
+              <h2 className="font-display text-lg font-bold text-[#102A43] m-0">
                 إنشاء مركز تعليمي جديد
               </h2>
               <button
                 type="button"
                 onClick={() => setShowCreate(false)}
                 aria-label="إغلاق"
-                className="p-1.5 text-slate-500 hover:bg-slate-100 rounded-lg cursor-pointer"
+                className="w-8 h-8 text-[#64748B] hover:bg-[#EEF4FA] rounded-lg inline-flex items-center justify-center cursor-pointer"
               >
-                <X className="w-5 h-5" />
+                <i className="bi bi-x-lg" aria-hidden="true" />
               </button>
             </div>
             <form onSubmit={handleCreateCenter} className="space-y-3">
@@ -548,7 +617,7 @@ export function CentersPage() {
                 placeholder="اسم المركز أو الأكاديمية"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg"
+                className="jusoor-input w-full px-3 py-2 text-sm"
               />
               <textarea
                 required
@@ -556,29 +625,33 @@ export function CentersPage() {
                 placeholder="وصف رسالة المركز وتخصصاته"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg"
+                className="jusoor-textarea w-full px-3 py-2 text-sm"
               />
-              <div className="grid grid-cols-2 gap-3">
-                <input
-                  type="text"
-                  required
-                  placeholder="المدينة"
-                  value={city}
-                  onChange={(e) => setCity(e.target.value)}
-                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg"
-                />
-                <input
-                  type="text"
-                  required
-                  placeholder="الدولة"
-                  value={country}
-                  onChange={(e) => setCountry(e.target.value)}
-                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg"
-                />
+              <div className="row g-2.5">
+                <div className="col-6">
+                  <input
+                    type="text"
+                    required
+                    placeholder="المدينة"
+                    value={city}
+                    onChange={(e) => setCity(e.target.value)}
+                    className="jusoor-input w-full px-3 py-2 text-sm"
+                  />
+                </div>
+                <div className="col-6">
+                  <input
+                    type="text"
+                    required
+                    placeholder="الدولة"
+                    value={country}
+                    onChange={(e) => setCountry(e.target.value)}
+                    className="jusoor-input w-full px-3 py-2 text-sm"
+                  />
+                </div>
               </div>
               <button
                 type="submit"
-                className="w-full py-2.5 bg-teal-700 hover:bg-teal-800 text-white text-sm font-semibold rounded-lg cursor-pointer"
+                className="btn-jusoor-primary w-full py-2.5 text-sm cursor-pointer"
               >
                 إنشاء المركز
               </button>

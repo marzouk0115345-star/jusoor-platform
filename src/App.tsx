@@ -17,12 +17,14 @@ import { InstructorProfilePage } from './pages/InstructorProfilePage';
 import { AssistantPage } from './pages/AssistantPage';
 import { AdminPage } from './pages/AdminPage';
 import { EducationalStagesPage } from './pages/EducationalStagesPage';
+import { CenterDashboardPage } from './pages/CenterDashboardPage';
+import { CenterProfilePage } from './pages/CenterProfilePage';
 
 export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900">
+        <div className="min-h-screen flex flex-col bg-[#F5F8FC] text-[#172B4D]">
           <Navbar />
           <main className="flex-1">
             <Routes>
@@ -36,6 +38,9 @@ export default function App() {
               <Route path="/bookings" element={<ProvidersAndBookingsPage />} />
               <Route path="/instructors/:instructorId" element={<InstructorProfilePage />} />
               <Route path="/centers" element={<CentersPage />} />
+              <Route path="/centers/:id" element={<CenterProfilePage />} />
+              <Route path="/centers/:centerId/dashboard" element={<CenterDashboardPage />} />
+              <Route path="/center-dashboard" element={<CenterDashboardPage />} />
               <Route path="/dashboard" element={<DashboardPage />} />
               <Route path="/messages" element={<MessagesPage />} />
               <Route path="/profile" element={<ProfilePage />} />

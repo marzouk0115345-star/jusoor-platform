@@ -1,24 +1,6 @@
 import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  BookOpen,
-  Calendar,
-  CheckCircle2,
-  Clock,
-  GraduationCap,
-  Layers,
-  MapPin,
-  Search,
-  Star,
-  User,
-  Users,
-  Video,
-  AlertCircle,
-  ArrowLeft,
-  ArrowRight,
-  SlidersHorizontal,
-} from 'lucide-react';
-import {
   apiFetch,
   DELIVERY_MODE_LABELS_AR,
   ENROLLMENT_STATUS_LABELS_AR,
@@ -40,6 +22,10 @@ import {
 } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { SafeImage } from '../components/SafeImage';
+import { PageHeader } from '../components/ui/PageHeader';
+import { StateBanner } from '../components/ui/StateBanner';
+import { EmptyState } from '../components/ui/EmptyState';
+import { LoadingSkeleton } from '../components/ui/LoadingSkeleton';
 
 function getInitials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -56,7 +42,6 @@ export function EducationalStagesPage() {
   const [loadingOverview, setLoadingOverview] = useState(true);
   const [overviewError, setOverviewError] = useState<string | null>(null);
 
-  // Selection State
   const [selectedYearId, setSelectedYearId] = useState<number | null>(null);
   const [selectedVersionId, setSelectedVersionId] = useState<number | null>(null);
   const [selectedStageId, setSelectedStageId] = useState<number | null>(null);
@@ -65,7 +50,6 @@ export function EducationalStagesPage() {
   const [selectedDivisionId, setSelectedDivisionId] = useState<number | null>(null);
   const [selectedPathwayId, setSelectedPathwayId] = useState<number | null>(null);
 
-  // Subjects State
   const [subjects, setSubjects] = useState<CurriculumSubjectItem[]>([]);
   const [loadingSubjects, setLoadingSubjects] = useState(false);
   const [subjectsError, setSubjectsError] = useState<string | null>(null);
@@ -74,7 +58,6 @@ export function EducationalStagesPage() {
   >('ALL');
   const [subjectSearch, setSubjectSearch] = useState('');
 
-  // Teacher Discovery State
   const [selectedSubject, setSelectedSubject] =
     useState<CurriculumSubjectItem | null>(null);
   const [teachers, setTeachers] = useState<DiscoveredTeacherItem[]>([]);
@@ -91,7 +74,6 @@ export function EducationalStagesPage() {
     'rating' | 'price_asc' | 'price_desc' | 'experience' | 'sessions'
   >('rating');
 
-  // Booking Modal State
   const [bookingSession, setBookingSession] = useState<{
     session: DiscoveredTeacherSessionItem;
     teacherName: string;
@@ -118,7 +100,6 @@ export function EducationalStagesPage() {
     }
   }, [selectedSubject]);
 
-  // Load initial curriculum overview once on mount (preserve selection across locale switches)
   useEffect(() => {
     let active = true;
     setLoadingOverview(true);
@@ -126,8 +107,12 @@ export function EducationalStagesPage() {
       .then((res) => {
         if (!active) return;
         setOverview(res);
-        setSelectedYearId((prev) => prev ?? res.activeAcademicYear?.id ?? res.academicYears[0]?.id ?? null);
-        setSelectedVersionId((prev) => prev ?? res.activeVersion?.id ?? res.versions[0]?.id ?? null);
+        setSelectedYearId(
+          (prev) => prev ?? res.activeAcademicYear?.id ?? res.academicYears[0]?.id ?? null
+        );
+        setSelectedVersionId(
+          (prev) => prev ?? res.activeVersion?.id ?? res.versions[0]?.id ?? null
+        );
         const firstStage = res.stages[0] || null;
         if (firstStage) {
           setSelectedStageId((prev) => prev ?? firstStage.id);
@@ -197,7 +182,6 @@ export function EducationalStagesPage() {
     return overview.pathways.filter((p) => p.gradeId === selectedGradeId);
   }, [overview, selectedGradeId, selectedSystem]);
 
-  // Handlers for cascading hierarchy changes
   const handleSelectStage = (stage: CurriculumStageItem) => {
     if (!overview) return;
     setSelectedStageId(stage.id);
@@ -261,7 +245,6 @@ export function EducationalStagesPage() {
     }
   };
 
-  // Load subjects for active selection
   const loadSubjects = useCallback(async () => {
     if (!selectedSystemId || !selectedGradeId || !selectedSystem || !selectedGrade) {
       setSubjects([]);
@@ -345,7 +328,6 @@ export function EducationalStagesPage() {
     loadSubjects();
   }, [loadSubjects]);
 
-  // Load matching teachers when a curriculum subject is selected
   const loadTeachersForSubject = useCallback(async () => {
     if (!selectedSubject) {
       setTeachers([]);
@@ -515,38 +497,26 @@ export function EducationalStagesPage() {
       .join(' · ');
   };
 
-  const DirectionArrow = isAr ? ArrowLeft : ArrowRight;
-
   return (
-    <div
-      className="max-w-7xl mx-auto px-4 sm:px-6 py-8 space-y-8"
-      data-testid="educational-stages-page"
-    >
-      {/* Page Header */}
-      <section className="bg-white border border-slate-200 rounded-xl p-6 sm:p-8 space-y-5">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          <div className="space-y-2 max-w-3xl">
-            <div className="text-xs font-semibold text-teal-700 flex items-center gap-2">
-              <GraduationCap className="w-4 h-4" />
-              <span>
-                {isAr
-                  ? 'التعليم العام المصري · منهج 2026/2027'
-                  : 'Egyptian General Education · 2026/2027 Curriculum'}
-              </span>
-            </div>
-            <h1 className="font-display text-2xl sm:text-3xl font-extrabold text-slate-900">
-              {isAr
-                ? 'المراحل التعليمية والمناهج الدراسية'
-                : 'Educational Stages & Egyptian Curriculum'}
-            </h1>
-            <p className="text-sm text-slate-600 leading-relaxed">
-              {isAr
-                ? 'تصفّح المرحلة والنظام التعليمي والصف الدراسي والشعبة أو المسار لاستعراض المواد الرسمية المقررة واكتشاف المعلّمين المتخصصين وحجز الدروس الفردية والجماعية.'
-                : 'Select your stage, educational system, grade, and division or pathway to explore official subjects, discover assigned teachers, and book 1:1 or group sessions.'}
-            </p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-3 shrink-0">
+    <div data-testid="educational-stages-page">
+      <PageHeader
+        kicker={
+          isAr
+            ? 'التعليم العام المصري · منهج 2026/2027'
+            : 'Egyptian General Education · 2026/2027 Curriculum'
+        }
+        title={
+          isAr
+            ? 'المراحل التعليمية والمناهج الدراسية'
+            : 'Educational Stages & Egyptian Curriculum'
+        }
+        subtitle={
+          isAr
+            ? 'تصفّح المرحلة والنظام التعليمي والصف الدراسي والشعبة أو المسار لاستعراض المواد الرسمية المقررة واكتشاف المعلّمين المتخصصين وحجز الدروس الفردية والجماعية.'
+            : 'Select your stage, educational system, grade, and division or pathway to explore official subjects, discover assigned teachers, and book 1:1 or group sessions.'
+        }
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
             {overview && overview.academicYears.length > 0 && (
               <select
                 value={selectedYearId || ''}
@@ -559,7 +529,7 @@ export function EducationalStagesPage() {
                   if (matchedVer) setSelectedVersionId(matchedVer.id);
                 }}
                 aria-label={isAr ? 'العام الدراسي' : 'Academic Year'}
-                className="px-3 py-2 text-xs sm:text-sm border border-slate-300 rounded-lg bg-white text-slate-800 font-medium"
+                className="jusoor-select px-3 py-2 text-xs sm:text-sm font-semibold"
               >
                 {overview.academicYears.map((y) => (
                   <option key={y.id} value={y.id}>
@@ -568,995 +538,1041 @@ export function EducationalStagesPage() {
                 ))}
               </select>
             )}
-
             <button
               type="button"
               onClick={() => setLocale(isAr ? 'en' : 'ar')}
-              className="px-3.5 py-2 text-xs font-semibold border border-slate-300 rounded-lg bg-slate-50 hover:bg-slate-100 text-slate-800 cursor-pointer"
+              className="btn-jusoor-outline px-3.5 py-2 text-xs cursor-pointer"
             >
               {isAr ? 'English (LTR)' : 'العربية (RTL)'}
             </button>
           </div>
-        </div>
+        }
+      />
 
-        {loadingOverview ? (
-          <div className="h-24 bg-slate-100 rounded-xl animate-pulse" />
-        ) : overviewError ? (
-          <div className="p-4 rounded-lg bg-red-50 border border-red-200 text-sm text-red-800">
-            {overviewError}
-          </div>
-        ) : overview ? (
-          <div className="space-y-6 pt-2 border-t border-slate-100">
-            {/* Step 1: Stage Selector */}
-            <div className="space-y-2.5">
-              <div className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                <Layers className="w-4 h-4 text-teal-700" />
-                <span>
-                  {isAr
-                    ? '1. اختر المرحلة التعليمية'
-                    : '1. Select Educational Stage'}
-                </span>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                {overview.stages.map((stage) => {
-                  const isActive = stage.id === selectedStageId;
-                  return (
-                    <button
-                      key={stage.id}
-                      type="button"
-                      onClick={() => handleSelectStage(stage)}
-                      data-testid={`stage-btn-${stage.slug}`}
-                      className={`p-4 rounded-xl border text-start transition-colors cursor-pointer ${
-                        isActive
-                          ? 'bg-teal-700 text-white border-teal-700'
-                          : 'bg-slate-50/70 text-slate-900 border-slate-200 hover:border-teal-600'
-                      }`}
-                    >
-                      <div className="font-display text-base font-bold">
-                        {isAr ? stage.nameAr : stage.nameEn}
-                      </div>
-                      <div
-                        className={`text-xs mt-1 ${
-                          isActive ? 'text-teal-100' : 'text-slate-500'
-                        }`}
-                      >
-                        {isAr ? stage.nameEn : stage.nameAr}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Step 2: Educational System Selector (especially Secondary: General Secondary vs Baccalaureate) */}
-            {availableSystems.length > 0 && (
-              <div className="space-y-2.5">
-                <div className="text-xs font-bold text-slate-700">
-                  {isAr
-                    ? '2. النظام التعليمي'
-                    : '2. Educational System'}
+      <div className="container-xxl px-3 px-sm-4 py-4 py-md-5 space-y-5">
+        {/* Stepper Selector Card */}
+        <section className="jusoor-card p-4 sm:p-5 space-y-5">
+          {loadingOverview ? (
+            <LoadingSkeleton variant="kpis" count={3} />
+          ) : overviewError ? (
+            <StateBanner variant="error" message={overviewError} />
+          ) : overview ? (
+            <div className="space-y-5">
+              {/* Step 1: Stage */}
+              <div className="space-y-2">
+                <div className="text-xs font-bold text-[#102A43] flex items-center gap-1.5">
+                  <i className="bi bi-layers text-[#0F766E]" aria-hidden="true" />
+                  <span>
+                    {isAr
+                      ? '1. اختر المرحلة التعليمية'
+                      : '1. Select Educational Stage'}
+                  </span>
                 </div>
-                <div
-                  className={`grid grid-cols-1 ${
-                    availableSystems.length > 1 ? 'sm:grid-cols-2' : ''
-                  } gap-3`}
-                >
-                  {availableSystems.map((sys) => {
-                    const isActive = sys.id === selectedSystemId;
+                <div className="row g-3">
+                  {overview.stages.map((stage) => {
+                    const isActive = stage.id === selectedStageId;
                     return (
-                      <button
-                        key={sys.id}
-                        type="button"
-                        onClick={() => handleSelectSystem(sys)}
-                        data-testid={`system-btn-${sys.code}`}
-                        className={`p-4 rounded-xl border text-start transition-colors cursor-pointer ${
-                          isActive
-                            ? 'bg-slate-900 text-white border-slate-900'
-                            : 'bg-white text-slate-900 border-slate-200 hover:border-slate-400'
-                        }`}
-                      >
-                        <div className="font-display text-sm sm:text-base font-bold">
-                          {isAr ? sys.nameAr : sys.nameEn}
-                        </div>
-                        {(sys.descriptionAr || sys.descriptionEn) && (
-                          <p
-                            className={`text-xs mt-1 leading-relaxed ${
-                              isActive ? 'text-slate-300' : 'text-slate-600'
-                            }`}
-                          >
-                            {isAr ? sys.descriptionAr : sys.descriptionEn}
-                          </p>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* Step 3: Grade Selector */}
-            {availableGrades.length > 0 && (
-              <div className="space-y-2.5">
-                <div className="text-xs font-bold text-slate-700">
-                  {isAr ? '3. الصف الدراسي' : '3. Grade Level'}
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {availableGrades.map((grade) => {
-                    const isActive = grade.id === selectedGradeId;
-                    return (
-                      <button
-                        key={grade.id}
-                        type="button"
-                        onClick={() => handleSelectGrade(grade)}
-                        data-testid={`grade-btn-${grade.slug}`}
-                        className={`px-4 py-2 rounded-lg border text-xs sm:text-sm font-semibold transition-colors cursor-pointer ${
-                          isActive
-                            ? 'bg-teal-700 text-white border-teal-700'
-                            : 'bg-white text-slate-800 border-slate-300 hover:border-teal-600'
-                        }`}
-                      >
-                        {isAr ? grade.nameAr : grade.nameEn}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* Step 4A: General Secondary Division Selector (Grade 2 & 3 only) */}
-            {availableDivisions.length > 0 && (
-              <div className="space-y-2.5">
-                <div className="text-xs font-bold text-slate-700">
-                  {isAr
-                    ? '4. اختر الشعبة الدراسية (الثانوية العامة)'
-                    : '4. Select Division (General Secondary)'}
-                </div>
-                <div className="flex flex-wrap gap-2.5">
-                  {availableDivisions.map((div) => {
-                    const isActive = div.id === selectedDivisionId;
-                    return (
-                      <button
-                        key={div.id}
-                        type="button"
-                        onClick={() => {
-                          setSelectedDivisionId(div.id);
-                          setSelectedSubject(null);
-                          setTeachers([]);
-                        }}
-                        data-testid={`division-btn-${div.code}`}
-                        className={`px-4 py-2.5 rounded-lg border text-xs sm:text-sm font-semibold transition-colors cursor-pointer ${
-                          isActive
-                            ? 'bg-slate-900 text-white border-slate-900'
-                            : 'bg-slate-50 text-slate-800 border-slate-300 hover:border-slate-500'
-                        }`}
-                      >
-                        {isAr ? div.nameAr : div.nameEn}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* Step 4B: Egyptian Baccalaureate Pathway Selector (Grade 2 & 3 only) */}
-            {availablePathways.length > 0 && (
-              <div className="space-y-2.5">
-                <div className="text-xs font-bold text-slate-700">
-                  {isAr
-                    ? '4. اختر المسار التخصصي (البكالوريا المصرية)'
-                    : '4. Select Pathway (Egyptian Baccalaureate)'}
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                  {availablePathways.map((pw) => {
-                    const isActive = pw.id === selectedPathwayId;
-                    return (
-                      <button
-                        key={pw.id}
-                        type="button"
-                        onClick={() => {
-                          setSelectedPathwayId(pw.id);
-                          setSelectedSubject(null);
-                          setTeachers([]);
-                        }}
-                        data-testid={`pathway-btn-${pw.code}`}
-                        className={`p-3.5 rounded-xl border text-start transition-colors cursor-pointer ${
-                          isActive
-                            ? 'bg-slate-900 text-white border-slate-900'
-                            : 'bg-slate-50 text-slate-900 border-slate-200 hover:border-slate-500'
-                        }`}
-                      >
-                        <div className="text-sm font-bold">
-                          {isAr ? pw.nameAr : pw.nameEn}
-                        </div>
-                        {(pw.descriptionAr || pw.descriptionEn) && (
-                          <div
-                            className={`text-[11px] mt-1 ${
-                              isActive ? 'text-slate-300' : 'text-slate-500'
-                            }`}
-                          >
-                            {isAr ? pw.descriptionAr : pw.descriptionEn}
+                      <div key={stage.id} className="col-12 col-sm-4">
+                        <button
+                          type="button"
+                          onClick={() => handleSelectStage(stage)}
+                          data-testid={`stage-btn-${stage.slug}`}
+                          className={`w-full p-3.5 rounded-xl border text-start transition-colors cursor-pointer ${
+                            isActive
+                              ? 'bg-[#0F766E] text-white border-[#0F766E]'
+                              : 'bg-[#F5F8FC] text-[#102A43] border-[#DCE5F0] hover:border-[#247BA0]'
+                          }`}
+                        >
+                          <div className="font-display text-base font-bold">
+                            {isAr ? stage.nameAr : stage.nameEn}
                           </div>
-                        )}
-                      </button>
+                          <div
+                            className={`text-xs mt-1 ${
+                              isActive ? 'text-teal-100' : 'text-[#64748B]'
+                            }`}
+                          >
+                            {isAr ? stage.nameEn : stage.nameAr}
+                          </div>
+                        </button>
+                      </div>
                     );
                   })}
                 </div>
               </div>
-            )}
-          </div>
-        ) : null}
-      </section>
 
-      {/* Step 5: Curriculum Subjects Browser */}
-      <section className="space-y-4">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          <div>
-            <h2 className="font-display text-xl font-bold text-slate-900">
-              {isAr ? 'المواد الدراسية المقررة' : 'Curriculum Subjects'}{' '}
-              <span className="font-mono-num text-base font-semibold text-teal-700">
-                ({subjects.length})
-              </span>
-            </h2>
-            {selectedGrade && selectedSystem && (
-              <p className="text-xs sm:text-sm text-slate-600 mt-0.5">
-                {isAr ? selectedSystem.nameAr : selectedSystem.nameEn} ·{' '}
-                {isAr ? selectedGrade.nameAr : selectedGrade.nameEn}
-                {selectedDivisionId &&
-                  availableDivisions.find((d) => d.id === selectedDivisionId) &&
-                  ` · ${
-                    isAr
-                      ? availableDivisions.find((d) => d.id === selectedDivisionId)!
-                          .nameAr
-                      : availableDivisions.find((d) => d.id === selectedDivisionId)!
-                          .nameEn
-                  }`}
-                {selectedPathwayId &&
-                  availablePathways.find((p) => p.id === selectedPathwayId) &&
-                  ` · ${
-                    isAr
-                      ? availablePathways.find((p) => p.id === selectedPathwayId)!
-                          .nameAr
-                      : availablePathways.find((p) => p.id === selectedPathwayId)!
-                          .nameEn
-                  }`}
-              </p>
-            )}
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="relative">
-              <Search className="w-4 h-4 text-slate-400 absolute top-2.5 start-3" />
-              <input
-                type="search"
-                value={subjectSearch}
-                onChange={(e) => setSubjectSearch(e.target.value)}
-                placeholder={isAr ? 'ابحث باسم المادة...' : 'Search subjects...'}
-                className="ps-9 pe-3 py-2 text-xs sm:text-sm border border-slate-300 rounded-lg bg-white w-56"
-              />
-            </div>
-
-            <select
-              value={subjectCategoryFilter}
-              onChange={(e) =>
-                setSubjectCategoryFilter(
-                  e.target.value as typeof subjectCategoryFilter
-                )
-              }
-              aria-label={isAr ? 'تصنيف المواد' : 'Subject category'}
-              className="px-3 py-2 text-xs sm:text-sm border border-slate-300 rounded-lg bg-white text-slate-800"
-            >
-              <option value="ALL">
-                {isAr ? 'جميع المواد والأنشطة' : 'All Subjects & Activities'}
-              </option>
-              <option value="CORE">
-                {isAr ? 'المواد الأساسية (داخل المجموع)' : 'Core Total Subjects'}
-              </option>
-              <option value="SPECIALIZATION_ELECTIVE">
-                {isAr
-                  ? 'المواد التخصصية والاختيارية'
-                  : 'Specialization & Elective'}
-              </option>
-              <option value="NON_TOTAL">
-                {isAr
-                  ? 'مواد خارج المجموع / نجاح ورسوب'
-                  : 'Non-Total & Pass/Fail'}
-              </option>
-              <option value="ACTIVITY">
-                {isAr ? 'الأنشطة التربوية والمدرسية' : 'Activities'}
-              </option>
-            </select>
-          </div>
-        </div>
-
-        {subjectsError && (
-          <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-sm text-red-800">
-            {subjectsError}
-          </div>
-        )}
-
-        {loadingSubjects ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {[1, 2, 3, 4, 5, 6].map((i) => (
-              <div
-                key={i}
-                className="h-44 bg-white border border-slate-200 rounded-xl animate-pulse"
-              />
-            ))}
-          </div>
-        ) : subjects.length === 0 ? (
-          <div className="bg-white border border-slate-200 rounded-xl p-10 text-center space-y-2">
-            <BookOpen className="w-8 h-8 text-slate-400 mx-auto" />
-            <div className="text-sm font-bold text-slate-900">
-              {isAr
-                ? 'لا توجد مواد مطابقة في هذا الاختيار'
-                : 'No subjects match the current selection'}
-            </div>
-            <p className="text-xs text-slate-500">
-              {isAr
-                ? 'جرّب تغيير تصنيف المواد أو البحث بكلمة مختلفة.'
-                : 'Try changing the category filter or search query.'}
-            </p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {subjects.map((cs) => {
-              const isSelected = selectedSubject?.id === cs.id;
-              const classifications = formatSubjectClassification(cs);
-              const variantsLabel = formatVariants(cs.curriculumVariants);
-
-              return (
-                <article
-                  key={cs.id}
-                  data-testid={`curriculum-subject-card-${cs.id}`}
-                  className={`bg-white rounded-xl border p-5 flex flex-col justify-between gap-4 transition-colors ${
-                    isSelected
-                      ? 'border-teal-700 ring-1 ring-teal-700'
-                      : 'border-slate-200 hover:border-teal-600/70'
-                  }`}
-                >
-                  <div className="space-y-2.5">
-                    <div className="text-[11px] font-medium text-slate-500 flex flex-wrap items-center gap-1.5">
-                      {classifications.map((tok, idx) => (
-                        <React.Fragment key={tok}>
-                          {idx > 0 && <span aria-hidden="true">·</span>}
-                          <span
-                            className={
-                              tok.includes('داخل المجموع') ||
-                              tok.includes('Included in Total')
-                                ? 'text-teal-800 font-semibold'
-                                : tok.includes('خارج المجموع') ||
-                                  tok.includes('Non-Total')
-                                ? 'text-amber-700 font-semibold'
-                                : ''
-                            }
+              {/* Step 2: Educational System */}
+              {availableSystems.length > 0 && (
+                <div className="space-y-2">
+                  <div className="text-xs font-bold text-[#102A43]">
+                    {isAr ? '2. النظام التعليمي' : '2. Educational System'}
+                  </div>
+                  <div className="row g-3">
+                    {availableSystems.map((sys) => {
+                      const isActive = sys.id === selectedSystemId;
+                      return (
+                        <div
+                          key={sys.id}
+                          className={
+                            availableSystems.length > 1
+                              ? 'col-12 col-sm-6'
+                              : 'col-12'
+                          }
+                        >
+                          <button
+                            type="button"
+                            onClick={() => handleSelectSystem(sys)}
+                            data-testid={`system-btn-${sys.code}`}
+                            className={`w-full p-3.5 rounded-xl border text-start transition-colors cursor-pointer ${
+                              isActive
+                                ? 'bg-[#102A43] text-white border-[#102A43]'
+                                : 'bg-white text-[#102A43] border-[#DCE5F0] hover:border-[#247BA0]'
+                            }`}
                           >
-                            {tok}
-                          </span>
-                        </React.Fragment>
-                      ))}
-                    </div>
-
-                    <h3 className="font-display text-base font-bold text-slate-900 leading-snug">
-                      {isAr ? cs.subjectNameAr : cs.subjectNameEn}
-                    </h3>
-
-                    <div className="text-xs text-slate-500 space-y-1">
-                      <div>
-                        {isAr ? 'لغة الدراسة:' : 'Instruction:'}{' '}
-                        <span className="font-medium text-slate-700">
-                          {formatLanguages(cs.languagesOfInstruction)}
-                        </span>
-                      </div>
-                      {variantsLabel && (
-                        <div>
-                          {isAr ? 'المسارات المتاحة:' : 'Variants:'}{' '}
-                          <span className="font-medium text-slate-700">
-                            {variantsLabel}
-                          </span>
+                            <div className="font-display text-sm sm:text-base font-bold">
+                              {isAr ? sys.nameAr : sys.nameEn}
+                            </div>
+                            {(sys.descriptionAr || sys.descriptionEn) && (
+                              <p
+                                className={`text-xs mt-1 leading-relaxed mb-0 ${
+                                  isActive ? 'text-slate-300' : 'text-[#64748B]'
+                                }`}
+                              >
+                                {isAr ? sys.descriptionAr : sys.descriptionEn}
+                              </p>
+                            )}
+                          </button>
                         </div>
-                      )}
-                      {(cs.notesAr || cs.notesEn) && (
-                        <p className="text-xs text-slate-600 line-clamp-2 pt-0.5">
-                          {isAr ? cs.notesAr : cs.notesEn}
-                        </p>
-                      )}
-                    </div>
+                      );
+                    })}
                   </div>
+                </div>
+              )}
 
-                  <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2 text-xs">
-                    <div className="text-slate-600 tabular-nums">
-                      <span className="font-bold text-slate-900">
-                        {cs.activeTeachersCount}
-                      </span>{' '}
-                      {isAr ? 'معلّم' : 'teachers'} ·{' '}
-                      <span className="font-bold text-teal-800">
-                        {cs.sessionsCount}
-                      </span>{' '}
-                      {isAr ? 'جلسة' : 'sessions'}
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        shouldScrollToTeachersRef.current = true;
-                        setSelectedSubject(cs);
-                        setTeacherQ('');
-                        setTeacherDelivery('');
-                        setTeacherLanguage('');
-                        setTeacherReligiousVariant('');
-                        setBookingFeedback(null);
-                        setBookingError(null);
-                      }}
-                      data-testid={`discover-teachers-btn-${cs.id}`}
-                      className={`px-3 py-1.5 rounded-lg font-semibold flex items-center gap-1 cursor-pointer transition-colors ${
-                        isSelected
-                          ? 'bg-slate-900 text-white'
-                          : 'bg-teal-700 hover:bg-teal-800 text-white'
-                      }`}
-                    >
-                      <span>
-                        {isSelected
-                          ? isAr
-                            ? 'محددة الآن'
-                            : 'Selected'
-                          : isAr
-                          ? 'عرض المعلّمين'
-                          : 'View Teachers'}
-                      </span>
-                      <DirectionArrow className="w-3.5 h-3.5" />
-                    </button>
+              {/* Step 3: Grade */}
+              {availableGrades.length > 0 && (
+                <div className="space-y-2">
+                  <div className="text-xs font-bold text-[#102A43]">
+                    {isAr ? '3. الصف الدراسي' : '3. Grade Level'}
                   </div>
-                </article>
-              );
-            })}
-          </div>
-        )}
-      </section>
+                  <div className="flex flex-wrap gap-2">
+                    {availableGrades.map((grade) => {
+                      const isActive = grade.id === selectedGradeId;
+                      return (
+                        <button
+                          key={grade.id}
+                          type="button"
+                          onClick={() => handleSelectGrade(grade)}
+                          data-testid={`grade-btn-${grade.slug}`}
+                          className={`px-4 py-2 rounded-lg border text-xs sm:text-sm font-semibold transition-colors cursor-pointer ${
+                            isActive
+                              ? 'bg-[#0F766E] text-white border-[#0F766E]'
+                              : 'bg-white text-[#172B4D] border-[#C5D3E3] hover:border-[#247BA0]'
+                          }`}
+                        >
+                          {isAr ? grade.nameAr : grade.nameEn}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
-      {/* Step 6: Discovered Teachers & Integrated Session Booking */}
-      {selectedSubject && (
-        <section
-          ref={teachersSectionRef}
-          id="curriculum-teachers-section"
-          className="scroll-mt-24 bg-white border border-slate-200 rounded-xl p-6 sm:p-8 space-y-6"
-          data-testid="discovered-teachers-section"
-        >
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-slate-200">
-            <div className="space-y-1">
-              <div className="text-xs font-semibold text-teal-700">
-                {isAr
-                  ? 'المعلّمون المخصصون لهذه المادة'
-                  : 'Assigned Teachers for Subject'}
-              </div>
-              <h2 className="font-display text-xl sm:text-2xl font-extrabold text-slate-900">
-                {isAr
-                  ? selectedSubject.subjectNameAr
-                  : selectedSubject.subjectNameEn}{' '}
-                <span className="text-base font-semibold text-slate-500 font-mono-num">
-                  ({teachersTotal})
+              {/* Step 4A: Division */}
+              {availableDivisions.length > 0 && (
+                <div className="space-y-2">
+                  <div className="text-xs font-bold text-[#102A43]">
+                    {isAr
+                      ? '4. اختر الشعبة الدراسية (الثانوية العامة)'
+                      : '4. Select Division (General Secondary)'}
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {availableDivisions.map((div) => {
+                      const isActive = div.id === selectedDivisionId;
+                      return (
+                        <button
+                          key={div.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedDivisionId(div.id);
+                            setSelectedSubject(null);
+                            setTeachers([]);
+                          }}
+                          data-testid={`division-btn-${div.code}`}
+                          className={`px-4 py-2 rounded-lg border text-xs sm:text-sm font-semibold transition-colors cursor-pointer ${
+                            isActive
+                              ? 'bg-[#102A43] text-white border-[#102A43]'
+                              : 'bg-[#F5F8FC] text-[#172B4D] border-[#C5D3E3] hover:border-[#247BA0]'
+                          }`}
+                        >
+                          {isAr ? div.nameAr : div.nameEn}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Step 4B: Pathway */}
+              {availablePathways.length > 0 && (
+                <div className="space-y-2">
+                  <div className="text-xs font-bold text-[#102A43]">
+                    {isAr
+                      ? '4. اختر المسار التخصصي (البكالوريا المصرية)'
+                      : '4. Select Pathway (Egyptian Baccalaureate)'}
+                  </div>
+                  <div className="row g-3">
+                    {availablePathways.map((pw) => {
+                      const isActive = pw.id === selectedPathwayId;
+                      return (
+                        <div key={pw.id} className="col-12 col-sm-6 col-lg-3">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedPathwayId(pw.id);
+                              setSelectedSubject(null);
+                              setTeachers([]);
+                            }}
+                            data-testid={`pathway-btn-${pw.code}`}
+                            className={`w-full p-3.5 rounded-xl border text-start transition-colors cursor-pointer h-full ${
+                              isActive
+                                ? 'bg-[#102A43] text-white border-[#102A43]'
+                                : 'bg-[#F5F8FC] text-[#102A43] border-[#DCE5F0] hover:border-[#247BA0]'
+                            }`}
+                          >
+                            <div className="text-sm font-bold">
+                              {isAr ? pw.nameAr : pw.nameEn}
+                            </div>
+                            {(pw.descriptionAr || pw.descriptionEn) && (
+                              <div
+                                className={`text-[11px] mt-1 ${
+                                  isActive ? 'text-slate-300' : 'text-[#64748B]'
+                                }`}
+                              >
+                                {isAr ? pw.descriptionAr : pw.descriptionEn}
+                              </div>
+                            )}
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : null}
+        </section>
+
+        {/* Step 5: Curriculum Subjects Browser */}
+        <section className="space-y-4">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+            <div>
+              <h2 className="font-display text-xl font-bold text-[#102A43] m-0">
+                {isAr ? 'المواد الدراسية المقررة' : 'Curriculum Subjects'}{' '}
+                <span className="font-mono-num text-base font-bold text-[#0F766E]">
+                  ({subjects.length})
                 </span>
               </h2>
-              <p className="text-xs text-slate-600">
-                {isAr ? selectedGrade?.nameAr : selectedGrade?.nameEn} ·{' '}
-                {isAr
-                  ? 'يمكنك التصفية وحجز جلسة فردية أو جماعية مباشرة أو زيارة الملف العام للمعلّم.'
-                  : 'Filter available teachers, view full profiles, or request a 1:1 / group session directly.'}
-              </p>
+              {selectedGrade && selectedSystem && (
+                <p className="text-xs sm:text-sm text-[#64748B] mt-1 mb-0">
+                  {isAr ? selectedSystem.nameAr : selectedSystem.nameEn} ·{' '}
+                  {isAr ? selectedGrade.nameAr : selectedGrade.nameEn}
+                  {selectedDivisionId &&
+                    availableDivisions.find((d) => d.id === selectedDivisionId) &&
+                    ` · ${
+                      isAr
+                        ? availableDivisions.find((d) => d.id === selectedDivisionId)!
+                            .nameAr
+                        : availableDivisions.find((d) => d.id === selectedDivisionId)!
+                            .nameEn
+                    }`}
+                  {selectedPathwayId &&
+                    availablePathways.find((p) => p.id === selectedPathwayId) &&
+                    ` · ${
+                      isAr
+                        ? availablePathways.find((p) => p.id === selectedPathwayId)!
+                            .nameAr
+                        : availablePathways.find((p) => p.id === selectedPathwayId)!
+                            .nameEn
+                    }`}
+                </p>
+              )}
             </div>
 
-            <button
-              type="button"
-              onClick={() => setSelectedSubject(null)}
-              className="self-start px-3.5 py-2 text-xs font-semibold border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-50 cursor-pointer"
-            >
-              {isAr ? 'إغلاق نتائج المعلّمين' : 'Close Results'}
-            </button>
-          </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="relative">
+                <i
+                  className="bi bi-search text-[#64748B] text-xs absolute top-1/2 -translate-y-1/2 start-3"
+                  aria-hidden="true"
+                />
+                <input
+                  type="search"
+                  value={subjectSearch}
+                  onChange={(e) => setSubjectSearch(e.target.value)}
+                  placeholder={isAr ? 'ابحث باسم المادة...' : 'Search subjects...'}
+                  className="jusoor-input ps-8 pe-3 py-2 text-xs sm:text-sm w-56"
+                />
+              </div>
 
-          {/* Discovery Filters Bar */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 bg-slate-50 border border-slate-200 rounded-xl p-4">
-            <div className="lg:col-span-2 relative">
-              <Search className="w-4 h-4 text-slate-400 absolute top-2.5 start-3" />
-              <input
-                type="search"
-                value={teacherQ}
-                onChange={(e) => setTeacherQ(e.target.value)}
-                placeholder={
-                  isAr
-                    ? 'ابحث باسم المعلّم أو التخصص...'
-                    : 'Search teacher name or bio...'
-                }
-                className="w-full ps-9 pe-3 py-2 text-xs border border-slate-300 rounded-lg bg-white"
-              />
-            </div>
-
-            <select
-              value={teacherDelivery}
-              onChange={(e) => setTeacherDelivery(e.target.value)}
-              aria-label={isAr ? 'طريقة التدريس' : 'Delivery Mode'}
-              className="px-3 py-2 text-xs border border-slate-300 rounded-lg bg-white"
-            >
-              <option value="">
-                {isAr ? 'أونلاين وحضوري' : 'Online & In-person'}
-              </option>
-              <option value="ONLINE">{isAr ? 'أونلاين فقط' : 'Online Only'}</option>
-              <option value="IN_PERSON">
-                {isAr ? 'حضوري فقط' : 'In-person Only'}
-              </option>
-            </select>
-
-            <select
-              value={teacherLanguage}
-              onChange={(e) => setTeacherLanguage(e.target.value)}
-              aria-label={isAr ? 'لغة الشرح' : 'Language'}
-              className="px-3 py-2 text-xs border border-slate-300 rounded-lg bg-white"
-            >
-              <option value="">{isAr ? 'كل اللغات' : 'All Languages'}</option>
-              {selectedSubject.languagesOfInstruction.map((langCode) => (
-                <option key={langCode} value={langCode}>
-                  {isAr
-                    ? LANGUAGE_OF_INSTRUCTION_LABELS[langCode]?.ar || langCode
-                    : LANGUAGE_OF_INSTRUCTION_LABELS[langCode]?.en || langCode}
-                </option>
-              ))}
-            </select>
-
-            <select
-              value={teacherSort}
-              onChange={(e) =>
-                setTeacherSort(e.target.value as typeof teacherSort)
-              }
-              aria-label={isAr ? 'الترتيب' : 'Sort by'}
-              className="px-3 py-2 text-xs border border-slate-300 rounded-lg bg-white"
-            >
-              <option value="rating">
-                {isAr ? 'الأعلى تقييماً' : 'Highest Rated'}
-              </option>
-              <option value="sessions">
-                {isAr ? 'الأكثر جلسات متاحة' : 'Most Sessions'}
-              </option>
-              <option value="price_asc">
-                {isAr ? 'الأقل سعراً' : 'Price: Low to High'}
-              </option>
-              <option value="price_desc">
-                {isAr ? 'الأعلى سعراً' : 'Price: High to Low'}
-              </option>
-              <option value="experience">
-                {isAr ? 'سنوات الخبرة' : 'Most Experienced'}
-              </option>
-            </select>
-
-            <label className="flex items-center gap-2 text-xs font-medium text-slate-700 px-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={teacherHasSessionsOnly}
-                onChange={(e) => setTeacherHasSessionsOnly(e.target.checked)}
-                className="rounded border-slate-300 text-teal-700"
-              />
-              <span>
-                {isAr ? 'بجلسات مفتوحة فقط' : 'With open sessions'}
-              </span>
-            </label>
-
-            {selectedSubject.curriculumVariants.some(
-              (v) => v === 'ISLAMIC' || v === 'CHRISTIAN'
-            ) && (
               <select
-                value={teacherReligiousVariant}
-                onChange={(e) => setTeacherReligiousVariant(e.target.value)}
-                aria-label={isAr ? 'مسار التربية الدينية' : 'Religious Track'}
-                className="px-3 py-2 text-xs border border-slate-300 rounded-lg bg-white sm:col-span-2"
+                value={subjectCategoryFilter}
+                onChange={(e) =>
+                  setSubjectCategoryFilter(
+                    e.target.value as typeof subjectCategoryFilter
+                  )
+                }
+                aria-label={isAr ? 'تصنيف المواد' : 'Subject category'}
+                className="jusoor-select px-3 py-2 text-xs sm:text-sm"
               >
-                <option value="">
-                  {isAr ? 'كل مسارات التربية الدينية' : 'All Religious Tracks'}
+                <option value="ALL">
+                  {isAr ? 'جميع المواد والأنشطة' : 'All Subjects & Activities'}
                 </option>
-                <option value="ISLAMIC">
-                  {isAr ? 'التربية الدينية الإسلامية' : 'Islamic Religion'}
+                <option value="CORE">
+                  {isAr ? 'المواد الأساسية (داخل المجموع)' : 'Core Total Subjects'}
                 </option>
-                <option value="CHRISTIAN">
-                  {isAr ? 'التربية الدينية المسيحية' : 'Christian Religion'}
+                <option value="SPECIALIZATION_ELECTIVE">
+                  {isAr
+                    ? 'المواد التخصصية والاختيارية'
+                    : 'Specialization & Elective'}
+                </option>
+                <option value="NON_TOTAL">
+                  {isAr
+                    ? 'مواد خارج المجموع / نجاح ورسوب'
+                    : 'Non-Total & Pass/Fail'}
+                </option>
+                <option value="ACTIVITY">
+                  {isAr ? 'الأنشطة التربوية والمدرسية' : 'Activities'}
                 </option>
               </select>
-            )}
+            </div>
           </div>
 
-          {bookingFeedback && (
-            <div className="p-3.5 rounded-lg bg-teal-50 border border-teal-200 text-xs sm:text-sm text-teal-900 flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4 text-teal-700 shrink-0" />
-              <span>{bookingFeedback}</span>
-            </div>
-          )}
-          {bookingError && (
-            <div className="p-3.5 rounded-lg bg-red-50 border border-red-200 text-xs sm:text-sm text-red-800 flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 shrink-0" />
-              <span>{bookingError}</span>
-            </div>
-          )}
-          {teachersError && (
-            <div className="p-3.5 rounded-lg bg-red-50 border border-red-200 text-xs sm:text-sm text-red-800">
-              {teachersError}
-            </div>
-          )}
+          {subjectsError && <StateBanner variant="error" message={subjectsError} />}
 
-          {loadingTeachers ? (
-            <div className="space-y-4">
-              {[1, 2].map((i) => (
-                <div
-                  key={i}
-                  className="h-44 bg-slate-50 border border-slate-200 rounded-xl animate-pulse"
-                />
-              ))}
-            </div>
-          ) : teachers.length === 0 ? (
-            <div className="border border-dashed border-slate-300 rounded-xl p-10 text-center space-y-2 bg-slate-50/60">
-              <SlidersHorizontal className="w-8 h-8 text-slate-400 mx-auto" />
-              <div className="text-sm font-bold text-slate-900">
-                {isAr
-                  ? 'لا يوجد معلّمون متطابقون مع معايير البحث الحالية'
-                  : 'No assigned teachers match these filters'}
-              </div>
-              <p className="text-xs text-slate-500">
-                {isAr
-                  ? 'يمكنك إزالة أحد الفلاتر أو تعيين معلّم لهذه المادة من لوحة المعلّم أو الإدارة.'
-                  : 'Try clearing some filters, or assign a teacher to this subject.'}
-              </p>
-            </div>
+          {loadingSubjects ? (
+            <LoadingSkeleton variant="cards" count={6} />
+          ) : subjects.length === 0 ? (
+            <EmptyState
+              icon="bi-book"
+              title={
+                isAr
+                  ? 'لا توجد مواد مطابقة في هذا الاختيار'
+                  : 'No subjects match the current selection'
+              }
+              description={
+                isAr
+                  ? 'جرّب تغيير تصنيف المواد أو البحث بكلمة مختلفة.'
+                  : 'Try changing the category filter or search query.'
+              }
+            />
           ) : (
-            <div className="space-y-5">
-              {teachers.map((teacher) => (
-                <article
-                  key={teacher.teacherId}
-                  data-testid={`discovered-teacher-card-${teacher.teacherId}`}
-                  className="border border-slate-200 rounded-xl p-5 sm:p-6 space-y-5 bg-white"
-                >
-                  <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
-                    <div className="flex items-start gap-4">
-                      {teacher.avatarUrl ? (
-                        <div className="w-16 h-16 rounded-xl overflow-hidden border border-slate-200 shrink-0 bg-slate-100">
-                          <SafeImage
-                            src={teacher.avatarUrl}
-                            alt={teacher.fullName}
-                            className="w-full h-full object-cover"
-                          />
-                        </div>
-                      ) : (
-                        <div className="w-16 h-16 rounded-xl bg-teal-50 border border-teal-200 text-teal-800 flex items-center justify-center font-display text-xl font-bold shrink-0">
-                          {getInitials(teacher.fullName)}
-                        </div>
-                      )}
+            <div className="row g-3 g-md-4">
+              {subjects.map((cs) => {
+                const isSelected = selectedSubject?.id === cs.id;
+                const classifications = formatSubjectClassification(cs);
+                const variantsLabel = formatVariants(cs.curriculumVariants);
 
-                      <div className="space-y-1.5">
-                        <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
-                          {teacher.verificationStatus === 'VERIFIED' && (
-                            <span className="inline-flex items-center gap-1 text-teal-800 font-semibold">
-                              <CheckCircle2 className="w-3.5 h-3.5 text-teal-700" />
-                              <span>{isAr ? 'معلّم موثّق' : 'Verified'}</span>
-                            </span>
-                          )}
-                          <span className="inline-flex items-center gap-1 text-amber-600 font-mono-num font-bold">
-                            <Star className="w-3.5 h-3.5 fill-amber-500" />
-                            {teacher.ratingAvg.toFixed(1)} ({teacher.reviewsCount})
-                          </span>
-                          <span aria-hidden="true">·</span>
-                          <span className="tabular-nums">
-                            {teacher.yearsExperience}{' '}
-                            {isAr ? 'سنوات خبرة' : 'yrs exp.'}
-                          </span>
+                return (
+                  <div key={cs.id} className="col-12 col-md-6 col-lg-4">
+                    <article
+                      data-testid={`curriculum-subject-card-${cs.id}`}
+                      className={`jusoor-card jusoor-card-interactive p-4 sm:p-5 h-full flex flex-col justify-between gap-4 ${
+                        isSelected ? 'border-[#0F766E] ring-1 ring-[#0F766E]' : ''
+                      }`}
+                    >
+                      <div className="space-y-2.5">
+                        <div className="text-[11px] font-medium text-[#64748B] flex flex-wrap items-center gap-1.5">
+                          {classifications.map((tok, idx) => (
+                            <React.Fragment key={tok}>
+                              {idx > 0 && <span aria-hidden="true">·</span>}
+                              <span
+                                className={
+                                  tok.includes('داخل المجموع') ||
+                                  tok.includes('Included in Total')
+                                    ? 'text-[#0F766E] font-bold'
+                                    : tok.includes('خارج المجموع') ||
+                                      tok.includes('Non-Total')
+                                    ? 'text-[#B45309] font-semibold'
+                                    : ''
+                                }
+                              >
+                                {tok}
+                              </span>
+                            </React.Fragment>
+                          ))}
                         </div>
 
-                        <h3 className="font-display text-lg font-bold text-slate-900">
-                          <Link
-                            to={`/instructors/${teacher.teacherId}`}
-                            className="hover:text-teal-700"
-                          >
-                            {teacher.fullName}
-                          </Link>
+                        <h3 className="font-display text-base font-bold text-[#102A43] leading-snug m-0">
+                          {isAr ? cs.subjectNameAr : cs.subjectNameEn}
                         </h3>
 
-                        <div className="text-xs font-semibold text-teal-800">
-                          {teacher.jobTitle}
-                        </div>
-
-                        {teacher.bio && (
-                          <p className="text-xs sm:text-sm text-slate-600 max-w-3xl line-clamp-2">
-                            {teacher.bio}
-                          </p>
-                        )}
-
-                        <div className="text-xs text-slate-500 flex flex-wrap items-center gap-2 pt-1">
-                          <span>
-                            {isAr ? 'لغات الشرح:' : 'Languages:'}{' '}
-                            <strong className="text-slate-800">
-                              {formatLanguages(teacher.languagesOffered)}
-                            </strong>
-                          </span>
-                          <span aria-hidden="true">·</span>
-                          <span>
-                            {teacher.supportsOnline && teacher.supportsInPerson
-                              ? isAr
-                                ? 'أونلاين وحضوري'
-                                : 'Online & In-person'
-                              : teacher.supportsOnline
-                              ? isAr
-                                ? 'أونلاين'
-                                : 'Online'
-                              : isAr
-                              ? 'حضوري'
-                              : 'In-person'}
-                          </span>
-                          <span aria-hidden="true">·</span>
-                          <span className="tabular-nums">
-                            {teacher.publishedCoursesCount}{' '}
-                            {isAr ? 'دورات منشورة' : 'published courses'}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex flex-row lg:flex-col items-center lg:items-end justify-between gap-3 shrink-0 pt-3 lg:pt-0 border-t lg:border-t-0 border-slate-100">
-                      <div className="text-end">
-                        <div className="font-mono-num text-xl font-extrabold text-slate-900">
-                          {formatCurrencyPrice(
-                            teacher.effectivePrice,
-                            teacher.currency || 'EGP',
-                            locale
+                        <div className="text-xs text-[#64748B] space-y-1">
+                          <div>
+                            {isAr ? 'لغة الدراسة:' : 'Instruction:'}{' '}
+                            <span className="font-semibold text-[#172B4D]">
+                              {formatLanguages(cs.languagesOfInstruction)}
+                            </span>
+                          </div>
+                          {variantsLabel && (
+                            <div>
+                              {isAr ? 'المسارات المتاحة:' : 'Variants:'}{' '}
+                              <span className="font-semibold text-[#172B4D]">
+                                {variantsLabel}
+                              </span>
+                            </div>
+                          )}
+                          {(cs.notesAr || cs.notesEn) && (
+                            <p className="text-xs text-[#64748B] line-clamp-2 pt-0.5 mb-0">
+                              {isAr ? cs.notesAr : cs.notesEn}
+                            </p>
                           )}
                         </div>
-                        <div className="text-[11px] text-slate-500">
-                          {isAr ? 'متوسط سعر الحصة' : 'Hourly / Session rate'}
-                        </div>
                       </div>
 
-                      <Link
-                        to={`/instructors/${teacher.teacherId}`}
-                        data-testid={`teacher-profile-link-${teacher.teacherId}`}
-                        className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-lg whitespace-nowrap"
-                      >
-                        {isAr
-                          ? 'عرض الملف العام والجلسات'
-                          : 'View Profile & Sessions'}
-                      </Link>
-                    </div>
-                  </div>
-
-                  {/* Other Curriculum Grades/Subjects Taught by Teacher */}
-                  {teacher.teachingAssignmentsSummary.length > 0 && (
-                    <div className="text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded-lg px-3.5 py-2.5">
-                      <span className="font-semibold text-slate-800">
-                        {isAr ? 'المواد والصفوف التي يدرّسها:' : 'Teaches:'}{' '}
-                      </span>
-                      {teacher.teachingAssignmentsSummary
-                        .slice(0, 5)
-                        .map((item) =>
-                          isAr
-                            ? `${item.subjectNameAr} (${item.gradeNameAr})`
-                            : `${item.subjectNameEn} (${item.gradeNameEn})`
-                        )
-                        .join(' · ')}
-                      {teacher.teachingAssignmentsSummary.length > 5 &&
-                        ` (+${teacher.teachingAssignmentsSummary.length - 5})`}
-                    </div>
-                  )}
-
-                  {/* Directly Bookable Individual & Group Sessions */}
-                  <div className="space-y-2.5">
-                    <div className="text-xs font-bold text-slate-800 flex flex-wrap items-center justify-between gap-2">
-                      <span>
-                        {isAr
-                          ? 'الجلسات الفردية والجماعية المتاحة للحجز الآن'
-                          : 'Available 1:1 & Group Sessions'}
-                      </span>
-                      <span className="text-slate-500 tabular-nums font-medium">
-                        {isAr
-                          ? teacher.onlineGroupSessionsCount !== undefined
-                            ? `${teacher.onlineGroupSessionsCount} جماعية أونلاين · ${teacher.onlineIndividualSlotsCount ?? 0} فردية أونلاين · ${teacher.offlineGroupSessionsCount ?? 0} جماعية أوفلاين`
-                            : `${teacher.individualSessionsCount} فردية · ${teacher.groupSessionsCount} جماعية`
-                          : `${teacher.individualSessionsCount} 1:1 · ${teacher.groupSessionsCount} Group`}
-                      </span>
-                    </div>
-
-                    {teacher.sessions.length === 0 ? (
-                      <div className="text-xs text-slate-500 py-2">
-                        {isAr
-                          ? 'لا توجد جلسات مجدولة لهذه المادة حالياً. يمكنك زيارة ملف المعلّم لعرض باقي مواعيده.'
-                          : 'No upcoming curriculum-linked sessions yet. Visit the teacher profile for more slots.'}
-                      </div>
-                    ) : (
-                      <>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                          {(() => {
-                            const onlineGrp = teacher.sessions.filter(
-                              (x) => x.sessionType === 'GROUP' && !isOfflineDeliveryMode(x.deliveryMode)
-                            );
-                            const online1on1 = teacher.sessions.filter(
-                              (x) => x.sessionType === 'ONE_TO_ONE' && !isOfflineDeliveryMode(x.deliveryMode)
-                            );
-                            const offlineGrp = teacher.sessions.filter(
-                              (x) => x.sessionType === 'GROUP' && isOfflineDeliveryMode(x.deliveryMode)
-                            );
-                            const picked = new Map<number, DiscoveredTeacherSessionItem>();
-                            for (const item of [
-                              ...online1on1.slice(0, 2),
-                              ...onlineGrp.slice(0, 2),
-                              ...offlineGrp.slice(0, 2),
-                              ...teacher.sessions,
-                            ]) {
-                              if (picked.size >= 6) break;
-                              picked.set(item.id, item);
-                            }
-                            return Array.from(picked.values());
-                          })().map((sess) => {
-                            const myEnr = sess.myEnrollment;
-                            const isOwn = user?.id === sess.teacherUserId;
-                            const isOffline = isOfflineDeliveryMode(sess.deliveryMode);
-                            return (
-                              <div
-                                key={sess.id}
-                                data-testid={`discovery-session-card-${sess.id}`}
-                                className="border border-slate-200 rounded-lg p-3.5 space-y-2.5 bg-slate-50/40"
-                              >
-                                <div className="flex items-center justify-between gap-2 text-xs">
-                                  <span className="font-semibold text-slate-800 flex items-center gap-1">
-                                    {sess.sessionType === 'ONE_TO_ONE' ? (
-                                      <User className="w-3.5 h-3.5 text-slate-700" />
-                                    ) : (
-                                      <Users className="w-3.5 h-3.5 text-teal-700" />
-                                    )}
-                                    {isAr
-                                      ? SESSION_TYPE_LABELS_AR[sess.sessionType]
-                                      : sess.sessionType === 'ONE_TO_ONE'
-                                      ? '1:1 Individual'
-                                      : 'Group Session'}
-                                    {sess.sessionType === 'ONE_TO_ONE' && sess.slotStatus && (
-                                      <span className="text-teal-800 mr-1">
-                                        · {INDIVIDUAL_SLOT_STATUS_LABELS_AR[sess.slotStatus] || sess.slotStatus}
-                                      </span>
-                                    )}
-                                  </span>
-                                  <span className="font-mono-num font-bold text-slate-900">
-                                    {formatCurrencyPrice(
-                                      sess.price,
-                                      sess.currency || 'EGP',
-                                      locale
-                                    )}
-                                  </span>
-                                </div>
-
-                                <div className="text-sm font-bold text-slate-900">
-                                  {sess.title}
-                                </div>
-
-                                <div className="text-[11px] text-slate-600 space-y-1">
-                                  <div className="flex items-center gap-1 font-mono-num">
-                                    <Clock className="w-3.5 h-3.5 text-teal-700 shrink-0" />
-                                    <span>
-                                      {formatSessionDateRange(
-                                        sess.startTime,
-                                        sess.endTime,
-                                        locale
-                                      )}
-                                    </span>
-                                    <span>({sess.durationMinutes} د)</span>
-                                  </div>
-                                  <div className="flex items-center justify-between">
-                                    <span className="flex items-center gap-1">
-                                      {!isOffline ? (
-                                        <Video className="w-3.5 h-3.5 text-teal-700" />
-                                      ) : (
-                                        <MapPin className="w-3.5 h-3.5 text-teal-700" />
-                                      )}
-                                      {isAr
-                                        ? DELIVERY_MODE_LABELS_AR[sess.deliveryMode]
-                                        : sess.deliveryMode}
-                                    </span>
-                                    <span className="tabular-nums font-semibold text-teal-800">
-                                      {isAr
-                                        ? `المتبقي: ${sess.remainingSeats}/${sess.capacity}`
-                                        : `${sess.remainingSeats}/${sess.capacity} seats left`}
-                                    </span>
-                                  </div>
-                                  {isOffline && sess.location && (
-                                    <div className="text-slate-700 font-medium pt-0.5">
-                                      العنوان: {sess.location}
-                                      {sess.isDemoLocation &&
-                                        !sess.location.includes('موقع عرض تجريبي') && (
-                                          <span className="text-slate-500 font-normal mr-1">
-                                            (موقع عرض تجريبي)
-                                          </span>
-                                        )}
-                                    </div>
-                                  )}
-                                </div>
-
-                                <div className="pt-2 border-t border-slate-200/70">
-                                  {myEnr &&
-                                  (myEnr.status === 'PENDING' ||
-                                    myEnr.status === 'ACCEPTED') ? (
-                                    <div className="flex items-center justify-between gap-2 text-xs">
-                                      <span className="font-semibold text-teal-800">
-                                        {isAr
-                                          ? ENROLLMENT_STATUS_LABELS_AR[myEnr.status]
-                                          : myEnr.status}
-                                      </span>
-                                      <button
-                                        type="button"
-                                        onClick={() => handleCancelMyEnrollment(myEnr.id)}
-                                        className="text-red-700 hover:underline font-semibold cursor-pointer"
-                                      >
-                                        {isAr ? 'إلغاء الطلب' : 'Cancel'}
-                                      </button>
-                                    </div>
-                                  ) : isOwn ? (
-                                    <span className="text-[11px] text-slate-500">
-                                      {isAr ? 'جلستك الخاصة' : 'Your own session'}
-                                    </span>
-                                  ) : sess.isRegistrationOpen ? (
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        if (!user) {
-                                          openAuthModal();
-                                          return;
-                                        }
-                                        setBookingError(null);
-                                        setBookingSession({
-                                          session: sess,
-                                          teacherName: teacher.fullName,
-                                        });
-                                      }}
-                                      data-testid={`book-discovery-session-btn-${sess.id}`}
-                                      className="w-full py-2 bg-teal-700 hover:bg-teal-800 text-white text-xs font-semibold rounded-lg cursor-pointer"
-                                    >
-                                      {sess.sessionType === 'ONE_TO_ONE'
-                                        ? isAr
-                                          ? 'طلب جلسة فردية'
-                                          : 'Request 1:1 Session'
-                                        : isAr
-                                        ? 'طلب انضمام للمجموعة'
-                                        : 'Join Group Session'}
-                                    </button>
-                                  ) : (
-                                    <span className="text-xs text-slate-500">
-                                      {isAr ? 'مكتملة / مغلقة' : 'Full / Closed'}
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                            );
-                          })}
+                      <div className="pt-3 border-t border-[#EDF2F7] flex items-center justify-between gap-2 text-xs">
+                        <div className="text-[#64748B] tabular-nums">
+                          <span className="font-bold text-[#102A43]">
+                            {cs.activeTeachersCount}
+                          </span>{' '}
+                          {isAr ? 'معلّم' : 'teachers'} ·{' '}
+                          <span className="font-bold text-[#0F766E]">
+                            {cs.sessionsCount}
+                          </span>{' '}
+                          {isAr ? 'جلسة' : 'sessions'}
                         </div>
-                        {teacher.sessions.length > 6 && (
-                          <div className="pt-1">
-                            <Link
-                              to={`/instructors/${teacher.teacherId}`}
-                              className="text-xs font-semibold text-teal-700 hover:underline"
-                            >
-                              {isAr
-                                ? `عرض جميع الجلسات المتاحة للمعلّم (${teacher.sessions.length} جلسة)`
-                                : `View all ${teacher.sessions.length} available sessions`}
-                            </Link>
-                          </div>
-                        )}
-                      </>
-                    )}
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            shouldScrollToTeachersRef.current = true;
+                            setSelectedSubject(cs);
+                            setTeacherQ('');
+                            setTeacherDelivery('');
+                            setTeacherLanguage('');
+                            setTeacherReligiousVariant('');
+                            setBookingFeedback(null);
+                            setBookingError(null);
+                          }}
+                          data-testid={`discover-teachers-btn-${cs.id}`}
+                          className={`px-3 py-1.5 text-xs font-semibold rounded-lg inline-flex items-center gap-1.5 cursor-pointer transition-colors ${
+                            isSelected ? 'btn-jusoor-navy' : 'btn-jusoor-primary'
+                          }`}
+                        >
+                          <span>
+                            {isSelected
+                              ? isAr
+                                ? 'محددة الآن'
+                                : 'Selected'
+                              : isAr
+                              ? 'عرض المعلّمين'
+                              : 'View Teachers'}
+                          </span>
+                          <i
+                            className={`bi ${
+                              isAr ? 'bi-arrow-left' : 'bi-arrow-right'
+                            }`}
+                            aria-hidden="true"
+                          />
+                        </button>
+                      </div>
+                    </article>
                   </div>
-                </article>
-              ))}
+                );
+              })}
             </div>
           )}
         </section>
-      )}
+
+        {/* Step 6: Discovered Teachers & Integrated Session Booking */}
+        {selectedSubject && (
+          <section
+            ref={teachersSectionRef}
+            id="curriculum-teachers-section"
+            className="scroll-mt-24 jusoor-card p-4 sm:p-6 space-y-5"
+            data-testid="discovered-teachers-section"
+          >
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-3 border-b border-[#DCE5F0]">
+              <div className="space-y-1">
+                <div className="text-xs font-bold text-[#0F766E]">
+                  {isAr
+                    ? 'المعلّمون المخصصون لهذه المادة'
+                    : 'Assigned Teachers for Subject'}
+                </div>
+                <h2 className="font-display text-xl sm:text-2xl font-extrabold text-[#102A43] m-0">
+                  {isAr
+                    ? selectedSubject.subjectNameAr
+                    : selectedSubject.subjectNameEn}{' '}
+                  <span className="text-base font-semibold text-[#64748B] font-mono-num">
+                    ({teachersTotal})
+                  </span>
+                </h2>
+                <p className="text-xs text-[#64748B] m-0">
+                  {isAr ? selectedGrade?.nameAr : selectedGrade?.nameEn} ·{' '}
+                  {isAr
+                    ? 'يمكنك التصفية وحجز جلسة فردية أو جماعية مباشرة أو زيارة الملف العام للمعلّم.'
+                    : 'Filter available teachers, view full profiles, or request a 1:1 / group session directly.'}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setSelectedSubject(null)}
+                className="btn-jusoor-outline self-start px-3.5 py-2 text-xs cursor-pointer"
+              >
+                {isAr ? 'إغلاق نتائج المعلّمين' : 'Close Results'}
+              </button>
+            </div>
+
+            {/* Discovery Filters Bar */}
+            <div className="jusoor-subcard p-3.5 row g-2.5 m-0">
+              <div className="col-12 col-sm-6 col-lg-4">
+                <div className="relative">
+                  <i
+                    className="bi bi-search text-[#64748B] text-xs absolute top-1/2 -translate-y-1/2 start-3"
+                    aria-hidden="true"
+                  />
+                  <input
+                    type="search"
+                    value={teacherQ}
+                    onChange={(e) => setTeacherQ(e.target.value)}
+                    placeholder={
+                      isAr
+                        ? 'ابحث باسم المعلّم أو التخصص...'
+                        : 'Search teacher name or bio...'
+                    }
+                    className="jusoor-input w-full ps-8 pe-3 py-2 text-xs"
+                  />
+                </div>
+              </div>
+
+              <div className="col-6 col-sm-3 col-lg-2">
+                <select
+                  value={teacherDelivery}
+                  onChange={(e) => setTeacherDelivery(e.target.value)}
+                  aria-label={isAr ? 'طريقة التدريس' : 'Delivery Mode'}
+                  className="jusoor-select w-full px-3 py-2 text-xs"
+                >
+                  <option value="">
+                    {isAr ? 'أونلاين وحضوري' : 'Online & In-person'}
+                  </option>
+                  <option value="ONLINE">{isAr ? 'أونلاين فقط' : 'Online Only'}</option>
+                  <option value="IN_PERSON">
+                    {isAr ? 'حضوري فقط' : 'In-person Only'}
+                  </option>
+                </select>
+              </div>
+
+              <div className="col-6 col-sm-3 col-lg-2">
+                <select
+                  value={teacherLanguage}
+                  onChange={(e) => setTeacherLanguage(e.target.value)}
+                  aria-label={isAr ? 'لغة الشرح' : 'Language'}
+                  className="jusoor-select w-full px-3 py-2 text-xs"
+                >
+                  <option value="">{isAr ? 'كل اللغات' : 'All Languages'}</option>
+                  {selectedSubject.languagesOfInstruction.map((langCode) => (
+                    <option key={langCode} value={langCode}>
+                      {isAr
+                        ? LANGUAGE_OF_INSTRUCTION_LABELS[langCode]?.ar || langCode
+                        : LANGUAGE_OF_INSTRUCTION_LABELS[langCode]?.en || langCode}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="col-6 col-sm-4 col-lg-2">
+                <select
+                  value={teacherSort}
+                  onChange={(e) =>
+                    setTeacherSort(e.target.value as typeof teacherSort)
+                  }
+                  aria-label={isAr ? 'الترتيب' : 'Sort by'}
+                  className="jusoor-select w-full px-3 py-2 text-xs"
+                >
+                  <option value="rating">
+                    {isAr ? 'الأعلى تقييماً' : 'Highest Rated'}
+                  </option>
+                  <option value="sessions">
+                    {isAr ? 'الأكثر جلسات متاحة' : 'Most Sessions'}
+                  </option>
+                  <option value="price_asc">
+                    {isAr ? 'الأقل سعراً' : 'Price: Low to High'}
+                  </option>
+                  <option value="price_desc">
+                    {isAr ? 'الأعلى سعراً' : 'Price: High to Low'}
+                  </option>
+                  <option value="experience">
+                    {isAr ? 'سنوات الخبرة' : 'Most Experienced'}
+                  </option>
+                </select>
+              </div>
+
+              <div className="col-6 col-sm-4 col-lg-2 flex items-center">
+                <label className="flex items-center gap-2 text-xs font-semibold text-[#172B4D] px-1 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={teacherHasSessionsOnly}
+                    onChange={(e) => setTeacherHasSessionsOnly(e.target.checked)}
+                  />
+                  <span>{isAr ? 'بجلسات مفتوحة فقط' : 'Open sessions'}</span>
+                </label>
+              </div>
+
+              {selectedSubject.curriculumVariants.some(
+                (v) => v === 'ISLAMIC' || v === 'CHRISTIAN'
+              ) && (
+                <div className="col-12 col-sm-4">
+                  <select
+                    value={teacherReligiousVariant}
+                    onChange={(e) => setTeacherReligiousVariant(e.target.value)}
+                    aria-label={isAr ? 'مسار التربية الدينية' : 'Religious Track'}
+                    className="jusoor-select w-full px-3 py-2 text-xs"
+                  >
+                    <option value="">
+                      {isAr ? 'كل مسارات التربية الدينية' : 'All Religious Tracks'}
+                    </option>
+                    <option value="ISLAMIC">
+                      {isAr ? 'التربية الدينية الإسلامية' : 'Islamic Religion'}
+                    </option>
+                    <option value="CHRISTIAN">
+                      {isAr ? 'التربية الدينية المسيحية' : 'Christian Religion'}
+                    </option>
+                  </select>
+                </div>
+              )}
+            </div>
+
+            {bookingFeedback && (
+              <StateBanner
+                variant="success"
+                message={bookingFeedback}
+                onDismiss={() => setBookingFeedback(null)}
+              />
+            )}
+            {bookingError && (
+              <StateBanner
+                variant="error"
+                message={bookingError}
+                onDismiss={() => setBookingError(null)}
+              />
+            )}
+            {teachersError && <StateBanner variant="error" message={teachersError} />}
+
+            {loadingTeachers ? (
+              <LoadingSkeleton variant="list" count={2} />
+            ) : teachers.length === 0 ? (
+              <EmptyState
+                icon="bi-sliders"
+                title={
+                  isAr
+                    ? 'لا يوجد معلّمون متطابقون مع معايير البحث الحالية'
+                    : 'No assigned teachers match these filters'
+                }
+                description={
+                  isAr
+                    ? 'يمكنك إزالة أحد الفلاتر أو تعيين معلّم لهذه المادة من لوحة المعلّم أو الإدارة.'
+                    : 'Try clearing some filters or assign a teacher to this subject.'
+                }
+              />
+            ) : (
+              <div className="space-y-4">
+                {teachers.map((teacher) => (
+                  <article
+                    key={teacher.teacherId}
+                    data-testid={`discovered-teacher-card-${teacher.teacherId}`}
+                    className="jusoor-card p-4 sm:p-5 space-y-4"
+                  >
+                    <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
+                      <div className="flex items-start gap-3.5">
+                        {teacher.avatarUrl ? (
+                          <div className="w-16 h-16 rounded-xl overflow-hidden border border-[#DCE5F0] shrink-0 bg-[#EEF4FA]">
+                            <SafeImage
+                              src={teacher.avatarUrl}
+                              alt={teacher.fullName}
+                              className="w-full h-full object-cover"
+                            />
+                          </div>
+                        ) : (
+                          <div className="w-16 h-16 rounded-xl bg-[#E8F8F5] border border-[#99E2D8] text-[#0F766E] flex items-center justify-center font-display text-xl font-bold shrink-0">
+                            {getInitials(teacher.fullName)}
+                          </div>
+                        )}
+
+                        <div className="space-y-1.5">
+                          <div className="flex flex-wrap items-center gap-2 text-xs text-[#64748B]">
+                            {teacher.verificationStatus === 'VERIFIED' && (
+                              <span className="inline-flex items-center gap-1 text-[#0F766E] font-bold">
+                                <i className="bi bi-patch-check-fill text-[#20B8A6]" aria-hidden="true" />
+                                <span>{isAr ? 'معلّم موثّق' : 'Verified'}</span>
+                              </span>
+                            )}
+                            <span className="inline-flex items-center gap-1 text-[#B45309] font-mono-num font-bold">
+                              <i className="bi bi-star-fill text-[#F59E0B]" aria-hidden="true" />
+                              {teacher.ratingAvg.toFixed(1)} ({teacher.reviewsCount})
+                            </span>
+                            <span aria-hidden="true">·</span>
+                            <span className="tabular-nums">
+                              {teacher.yearsExperience}{' '}
+                              {isAr ? 'سنوات خبرة' : 'yrs exp.'}
+                            </span>
+                          </div>
+
+                          <h3 className="font-display text-lg font-bold text-[#102A43] m-0">
+                            <Link
+                              to={`/instructors/${teacher.teacherId}`}
+                              className="text-[#102A43] hover:text-[#247BA0]"
+                            >
+                              {teacher.fullName}
+                            </Link>
+                          </h3>
+
+                          <div className="text-xs font-semibold text-[#0F766E]">
+                            {teacher.jobTitle}
+                          </div>
+
+                          {teacher.bio && (
+                            <p className="text-xs sm:text-sm text-[#64748B] max-w-3xl line-clamp-2 m-0">
+                              {teacher.bio}
+                            </p>
+                          )}
+
+                          <div className="text-xs text-[#64748B] flex flex-wrap items-center gap-2 pt-1">
+                            <span>
+                              {isAr ? 'لغات الشرح:' : 'Languages:'}{' '}
+                              <strong className="text-[#102A43]">
+                                {formatLanguages(teacher.languagesOffered)}
+                              </strong>
+                            </span>
+                            <span aria-hidden="true">·</span>
+                            <span>
+                              {teacher.supportsOnline && teacher.supportsInPerson
+                                ? isAr
+                                  ? 'أونلاين وحضوري'
+                                  : 'Online & In-person'
+                                : teacher.supportsOnline
+                                ? isAr
+                                  ? 'أونلاين'
+                                  : 'Online'
+                                : isAr
+                                ? 'حضوري'
+                                : 'In-person'}
+                            </span>
+                            <span aria-hidden="true">·</span>
+                            <span className="tabular-nums">
+                              {teacher.publishedCoursesCount}{' '}
+                              {isAr ? 'دورات منشورة' : 'published courses'}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-row lg:flex-col items-center lg:items-end justify-between gap-3 shrink-0 pt-3 lg:pt-0 border-t lg:border-t-0 border-[#EDF2F7]">
+                        <div className="text-end">
+                          <div className="font-mono-num text-xl font-extrabold text-[#102A43]">
+                            {formatCurrencyPrice(
+                              teacher.effectivePrice,
+                              teacher.currency || 'EGP',
+                              locale
+                            )}
+                          </div>
+                          <div className="text-[11px] text-[#64748B]">
+                            {isAr ? 'متوسط سعر الحصة' : 'Hourly / Session rate'}
+                          </div>
+                        </div>
+
+                        <Link
+                          to={`/instructors/${teacher.teacherId}`}
+                          data-testid={`teacher-profile-link-${teacher.teacherId}`}
+                          className="btn-jusoor-navy px-4 py-2 text-xs whitespace-nowrap"
+                        >
+                          {isAr
+                            ? 'عرض الملف العام والجلسات'
+                            : 'View Profile & Sessions'}
+                        </Link>
+                      </div>
+                    </div>
+
+                    {teacher.teachingAssignmentsSummary.length > 0 && (
+                      <div className="jusoor-subcard text-xs text-[#64748B] px-3.5 py-2.5">
+                        <span className="font-bold text-[#102A43]">
+                          {isAr ? 'المواد والصفوف التي يدرّسها:' : 'Teaches:'}{' '}
+                        </span>
+                        {teacher.teachingAssignmentsSummary
+                          .slice(0, 5)
+                          .map((item) =>
+                            isAr
+                              ? `${item.subjectNameAr} (${item.gradeNameAr})`
+                              : `${item.subjectNameEn} (${item.gradeNameEn})`
+                          )
+                          .join(' · ')}
+                        {teacher.teachingAssignmentsSummary.length > 5 &&
+                          ` (+${teacher.teachingAssignmentsSummary.length - 5})`}
+                      </div>
+                    )}
+
+                    {/* Directly Bookable Sessions */}
+                    <div className="space-y-2.5">
+                      <div className="text-xs font-bold text-[#102A43] flex flex-wrap items-center justify-between gap-2">
+                        <span>
+                          {isAr
+                            ? 'الجلسات الفردية والجماعية المتاحة للحجز الآن'
+                            : 'Available 1:1 & Group Sessions'}
+                        </span>
+                        <span className="text-[#64748B] tabular-nums font-medium">
+                          {isAr
+                            ? teacher.onlineGroupSessionsCount !== undefined
+                              ? `${teacher.onlineGroupSessionsCount} جماعية أونلاين · ${
+                                  teacher.onlineIndividualSlotsCount ?? 0
+                                } فردية أونلاين · ${
+                                  teacher.offlineGroupSessionsCount ?? 0
+                                } جماعية أوفلاين`
+                              : `${teacher.individualSessionsCount} فردية · ${teacher.groupSessionsCount} جماعية`
+                            : `${teacher.individualSessionsCount} 1:1 · ${teacher.groupSessionsCount} Group`}
+                        </span>
+                      </div>
+
+                      {teacher.sessions.length === 0 ? (
+                        <div className="text-xs text-[#64748B] py-2">
+                          {isAr
+                            ? 'لا توجد جلسات مجدولة لهذه المادة حالياً. يمكنك زيارة ملف المعلّم لعرض باقي مواعيده.'
+                            : 'No upcoming curriculum-linked sessions yet. Visit the teacher profile for more slots.'}
+                        </div>
+                      ) : (
+                        <>
+                          <div className="row g-3">
+                            {(() => {
+                              const onlineGrp = teacher.sessions.filter(
+                                (x) =>
+                                  x.sessionType === 'GROUP' &&
+                                  !isOfflineDeliveryMode(x.deliveryMode)
+                              );
+                              const online1on1 = teacher.sessions.filter(
+                                (x) =>
+                                  x.sessionType === 'ONE_TO_ONE' &&
+                                  !isOfflineDeliveryMode(x.deliveryMode)
+                              );
+                              const offlineGrp = teacher.sessions.filter(
+                                (x) =>
+                                  x.sessionType === 'GROUP' &&
+                                  isOfflineDeliveryMode(x.deliveryMode)
+                              );
+                              const picked = new Map<
+                                number,
+                                DiscoveredTeacherSessionItem
+                              >();
+                              for (const item of [
+                                ...online1on1.slice(0, 2),
+                                ...onlineGrp.slice(0, 2),
+                                ...offlineGrp.slice(0, 2),
+                                ...teacher.sessions,
+                              ]) {
+                                if (picked.size >= 6) break;
+                                picked.set(item.id, item);
+                              }
+                              return Array.from(picked.values());
+                            })().map((sess) => {
+                              const myEnr = sess.myEnrollment;
+                              const isOwn = user?.id === sess.teacherUserId;
+                              const isOffline = isOfflineDeliveryMode(
+                                sess.deliveryMode
+                              );
+                              return (
+                                <div key={sess.id} className="col-12 col-md-6">
+                                  <div
+                                    data-testid={`discovery-session-card-${sess.id}`}
+                                    className="jusoor-subcard p-3.5 h-full flex flex-col justify-between gap-2.5"
+                                  >
+                                    <div className="space-y-2">
+                                      <div className="flex items-center justify-between gap-2 text-xs">
+                                        <span className="font-semibold text-[#102A43] inline-flex items-center gap-1">
+                                          <i
+                                            className={`bi ${
+                                              sess.sessionType === 'ONE_TO_ONE'
+                                                ? 'bi-person-video text-[#247BA0]'
+                                                : 'bi-people-fill text-[#0F766E]'
+                                            }`}
+                                            aria-hidden="true"
+                                          />
+                                          {isAr
+                                            ? SESSION_TYPE_LABELS_AR[sess.sessionType]
+                                            : sess.sessionType === 'ONE_TO_ONE'
+                                            ? '1:1 Individual'
+                                            : 'Group Session'}
+                                          {sess.sessionType === 'ONE_TO_ONE' &&
+                                            sess.slotStatus && (
+                                              <span className="text-[#0F766E] mr-1">
+                                                ·{' '}
+                                                {INDIVIDUAL_SLOT_STATUS_LABELS_AR[
+                                                  sess.slotStatus
+                                                ] || sess.slotStatus}
+                                              </span>
+                                            )}
+                                        </span>
+                                        <span className="font-mono-num font-bold text-[#102A43]">
+                                          {formatCurrencyPrice(
+                                            sess.price,
+                                            sess.currency || 'EGP',
+                                            locale
+                                          )}
+                                        </span>
+                                      </div>
+
+                                      <div className="text-sm font-bold text-[#102A43]">
+                                        {sess.title}
+                                      </div>
+
+                                      <div className="text-[11px] text-[#64748B] space-y-1">
+                                        <div className="flex items-center gap-1 font-mono-num">
+                                          <i
+                                            className="bi bi-clock text-[#0F766E] shrink-0"
+                                            aria-hidden="true"
+                                          />
+                                          <span>
+                                            {formatSessionDateRange(
+                                              sess.startTime,
+                                              sess.endTime,
+                                              locale
+                                            )}
+                                          </span>
+                                          <span>({sess.durationMinutes} د)</span>
+                                        </div>
+                                        <div className="flex items-center justify-between">
+                                          <span className="inline-flex items-center gap-1">
+                                            <i
+                                              className={`bi ${
+                                                !isOffline
+                                                  ? 'bi-camera-video'
+                                                  : 'bi-geo-alt'
+                                              } text-[#0F766E]`}
+                                              aria-hidden="true"
+                                            />
+                                            {isAr
+                                              ? DELIVERY_MODE_LABELS_AR[
+                                                  sess.deliveryMode
+                                                ]
+                                              : sess.deliveryMode}
+                                          </span>
+                                          <span className="tabular-nums font-semibold text-[#0F766E]">
+                                            {isAr
+                                              ? `المتبقي: ${sess.remainingSeats}/${sess.capacity}`
+                                              : `${sess.remainingSeats}/${sess.capacity} seats left`}
+                                          </span>
+                                        </div>
+                                        {isOffline && sess.location && (
+                                          <div className="text-[#172B4D] font-medium pt-0.5">
+                                            {isAr ? 'العنوان:' : 'Address:'}{' '}
+                                            {sess.location}
+                                            {sess.isDemoLocation &&
+                                              !sess.location.includes(
+                                                'موقع عرض تجريبي'
+                                              ) && (
+                                                <span className="text-[#64748B] font-normal mr-1">
+                                                  (موقع عرض تجريبي)
+                                                </span>
+                                              )}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+
+                                    <div className="pt-2 border-t border-[#DCE5F0]">
+                                      {myEnr &&
+                                      (myEnr.status === 'PENDING' ||
+                                        myEnr.status === 'ACCEPTED') ? (
+                                        <div className="flex items-center justify-between gap-2 text-xs">
+                                          <span className="font-bold text-[#0F766E]">
+                                            {isAr
+                                              ? ENROLLMENT_STATUS_LABELS_AR[
+                                                  myEnr.status
+                                                ]
+                                              : myEnr.status}
+                                          </span>
+                                          <button
+                                            type="button"
+                                            onClick={() =>
+                                              handleCancelMyEnrollment(myEnr.id)
+                                            }
+                                            className="text-[#DC2626] hover:underline font-semibold cursor-pointer"
+                                          >
+                                            {isAr ? 'إلغاء الطلب' : 'Cancel'}
+                                          </button>
+                                        </div>
+                                      ) : isOwn ? (
+                                        <span className="text-[11px] text-[#64748B]">
+                                          {isAr
+                                            ? 'جلستك الخاصة'
+                                            : 'Your own session'}
+                                        </span>
+                                      ) : sess.isRegistrationOpen ? (
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            if (!user) {
+                                              openAuthModal();
+                                              return;
+                                            }
+                                            setBookingError(null);
+                                            setBookingSession({
+                                              session: sess,
+                                              teacherName: teacher.fullName,
+                                            });
+                                          }}
+                                          data-testid={`book-discovery-session-btn-${sess.id}`}
+                                          className="btn-jusoor-primary w-full py-2 text-xs cursor-pointer"
+                                        >
+                                          {sess.sessionType === 'ONE_TO_ONE'
+                                            ? isAr
+                                              ? 'طلب جلسة فردية'
+                                              : 'Request 1:1 Session'
+                                            : isAr
+                                            ? 'طلب انضمام للمجموعة'
+                                            : 'Join Group Session'}
+                                        </button>
+                                      ) : (
+                                        <span className="text-xs text-[#64748B]">
+                                          {isAr
+                                            ? 'مكتملة / مغلقة'
+                                            : 'Full / Closed'}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                          {teacher.sessions.length > 6 && (
+                            <div className="pt-1">
+                              <Link
+                                to={`/instructors/${teacher.teacherId}`}
+                                className="text-xs font-bold text-[#0F766E] hover:underline"
+                              >
+                                {isAr
+                                  ? `عرض جميع الجلسات المتاحة للمعلّم (${teacher.sessions.length} جلسة)`
+                                  : `View all ${teacher.sessions.length} available sessions`}
+                              </Link>
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+      </div>
 
       {/* Booking Modal */}
       {bookingSession && (
         <div
-          className="fixed inset-0 z-50 bg-slate-900/50 flex items-center justify-center p-4"
+          className="fixed inset-0 z-50 bg-[#102A43]/60 backdrop-blur-xs flex items-center justify-center p-4"
           role="dialog"
           aria-modal="true"
         >
-          <div className="bg-white border border-slate-200 rounded-xl w-full max-w-md p-6 space-y-4">
-            <h3 className="font-display text-lg font-bold text-slate-900 flex items-center gap-2">
-              <Calendar className="w-5 h-5 text-teal-700" />
+          <div className="jusoor-card w-full max-w-md p-5 sm:p-6 space-y-4">
+            <h3 className="font-display text-lg font-bold text-[#102A43] flex items-center gap-2 m-0">
+              <i className="bi bi-calendar2-check text-[#0F766E]" aria-hidden="true" />
               <span>
                 {bookingSession.session.sessionType === 'ONE_TO_ONE'
                   ? isAr
@@ -1568,37 +1584,42 @@ export function EducationalStagesPage() {
               </span>
             </h3>
 
-            <dl className="bg-slate-50 border border-slate-200 rounded-lg p-3.5 text-xs grid grid-cols-2 gap-2 text-slate-600">
-              <div className="col-span-2 font-bold text-slate-900">
+            <dl className="jusoor-subcard p-3.5 text-xs row g-2 m-0 text-[#64748B]">
+              <div className="col-12 font-bold text-[#102A43]">
                 {bookingSession.session.title}
               </div>
-              <div>
-                <span className="text-slate-500">{isAr ? 'المعلّم: ' : 'Teacher: '}</span>
-                <strong className="text-slate-900">{bookingSession.teacherName}</strong>
+              <div className="col-6">
+                <span>{isAr ? 'المعلّم: ' : 'Teacher: '}</span>
+                <strong className="text-[#102A43]">
+                  {bookingSession.teacherName}
+                </strong>
               </div>
               {selectedSubject && (
-                <div>
-                  <span className="text-slate-500">{isAr ? 'المادة: ' : 'Subject: '}</span>
-                  <strong className="text-slate-900">
-                    {isAr ? selectedSubject.subjectNameAr : selectedSubject.subjectNameEn}
+                <div className="col-6">
+                  <span>{isAr ? 'المادة: ' : 'Subject: '}</span>
+                  <strong className="text-[#102A43]">
+                    {isAr
+                      ? selectedSubject.subjectNameAr
+                      : selectedSubject.subjectNameEn}
                   </strong>
                 </div>
               )}
               {selectedGrade && (
-                <div>
-                  <span className="text-slate-500">{isAr ? 'الصف: ' : 'Grade: '}</span>
-                  <strong className="text-slate-900">
+                <div className="col-6">
+                  <span>{isAr ? 'الصف: ' : 'Grade: '}</span>
+                  <strong className="text-[#102A43]">
                     {isAr ? selectedGrade.nameAr : selectedGrade.nameEn}
                   </strong>
                 </div>
               )}
-              <div>
-                <span className="text-slate-500">{isAr ? 'المدة: ' : 'Duration: '}</span>
-                <strong className="font-mono-num text-slate-900">
-                  {bookingSession.session.durationMinutes} {isAr ? 'دقيقة' : 'min'}
+              <div className="col-6">
+                <span>{isAr ? 'المدة: ' : 'Duration: '}</span>
+                <strong className="font-mono-num text-[#102A43]">
+                  {bookingSession.session.durationMinutes}{' '}
+                  {isAr ? 'دقيقة' : 'min'}
                 </strong>
               </div>
-              <div className="col-span-2 font-mono-num text-slate-900 font-semibold">
+              <div className="col-12 font-mono-num text-[#102A43] font-semibold">
                 {formatSessionDateRange(
                   bookingSession.session.startTime,
                   bookingSession.session.endTime,
@@ -1607,12 +1628,12 @@ export function EducationalStagesPage() {
               </div>
               {isOfflineDeliveryMode(bookingSession.session.deliveryMode) &&
                 bookingSession.session.location && (
-                  <div className="col-span-2 text-slate-700 font-medium">
+                  <div className="col-12 text-[#172B4D] font-medium">
                     {isAr ? 'العنوان: ' : 'Address: '}
                     {bookingSession.session.location}
                   </div>
                 )}
-              <div className="col-span-2 font-mono-num font-bold text-teal-800 pt-1 border-t border-slate-200">
+              <div className="col-12 font-mono-num font-bold text-[#0F766E] pt-1 border-t border-[#DCE5F0]">
                 {formatCurrencyPrice(
                   bookingSession.session.price,
                   bookingSession.session.currency || 'EGP',
@@ -1623,8 +1644,10 @@ export function EducationalStagesPage() {
 
             <form onSubmit={handleBookSessionSubmit} className="space-y-3">
               <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">
-                  {isAr ? 'ملاحظات للمعلّم (اختياري)' : 'Notes for Teacher (Optional)'}
+                <label className="block text-xs font-semibold text-[#172B4D] mb-1">
+                  {isAr
+                    ? 'ملاحظات للمعلّم (اختياري)'
+                    : 'Notes for Teacher (Optional)'}
                 </label>
                 <textarea
                   rows={3}
@@ -1635,7 +1658,7 @@ export function EducationalStagesPage() {
                       ? 'اذكر الدروس التي تحتاج شرحها أو أهدافك...'
                       : 'Share topics or questions you want to cover...'
                   }
-                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg"
+                  className="jusoor-textarea w-full px-3 py-2 text-sm"
                 />
               </div>
 
@@ -1643,7 +1666,7 @@ export function EducationalStagesPage() {
                 <button
                   type="submit"
                   disabled={bookingSubmitting}
-                  className="flex-1 py-2.5 bg-teal-700 hover:bg-teal-800 disabled:opacity-60 text-white text-sm font-semibold rounded-lg cursor-pointer"
+                  className="btn-jusoor-primary flex-1 py-2.5 text-sm cursor-pointer"
                 >
                   {bookingSubmitting
                     ? isAr
@@ -1656,7 +1679,7 @@ export function EducationalStagesPage() {
                 <button
                   type="button"
                   onClick={() => setBookingSession(null)}
-                  className="px-4 py-2.5 border border-slate-300 text-slate-700 text-sm font-semibold rounded-lg cursor-pointer"
+                  className="btn-jusoor-outline px-4 py-2.5 text-sm cursor-pointer"
                 >
                   {isAr ? 'إلغاء' : 'Cancel'}
                 </button>

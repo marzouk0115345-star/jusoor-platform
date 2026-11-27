@@ -48,9 +48,19 @@ import {
   teachingSessions,
   sessionEnrollments,
   teacherAvailability,
+  centerBranches,
+  centerRooms,
+  centerStudents,
+  centerAttendance,
+  centerStudentPayments,
 } from '../db/schema.ts';
 import { ensureEgyptianCurriculumSeeded } from './curriculumSeed.ts';
 import { ensureAllTeacherAssignmentSessionsSeeded } from './sessionsSeed.ts';
+import {
+  DEFAULT_CENTER_BOOKING_POLICIES,
+  DEFAULT_CENTER_NOTIFICATION_SETTINGS,
+  DEFAULT_CENTER_WORKING_HOURS,
+} from '../lib/domain.ts';
 
 let seedPromise: Promise<void> | null = null;
 
@@ -76,6 +86,7 @@ async function runSeed(): Promise<void> {
     if (existingSeededAssignments.length === 0) {
       await ensureAllTeacherAssignmentSessionsSeeded();
     }
+    await ensureCenterDashboardDemoDataSeeded();
     return;
   }
 
@@ -751,6 +762,7 @@ async function runSeed(): Promise<void> {
   await ensureLessonSessionsSeeded();
   await ensureEgyptianCurriculumSeeded();
   await ensureAllTeacherAssignmentSessionsSeeded();
+  await ensureCenterDashboardDemoDataSeeded();
 }
 
 async function ensureLessonSessionsSeeded(): Promise<void> {
@@ -882,6 +894,187 @@ async function ensureLessonSessionsSeeded(): Promise<void> {
         respondedAt: new Date(),
       },
     ]);
+  }
+}
+
+async function ensureCenterDashboardDemoDataSeeded(): Promise<void> {
+  const [demoCenter] = await db
+    .select()
+    .from(centers)
+    .where(eq(centers.slug, 'horizon-tech-academy'))
+    .limit(1);
+
+  if (!demoCenter) return;
+
+  if (
+    !demoCenter.address ||
+    !demoCenter.governorate ||
+    !demoCenter.street ||
+    !demoCenter.buildingDetails ||
+    !demoCenter.phone ||
+    !demoCenter.workingHoursJson ||
+    demoCenter.workingHoursJson.length !== 7 ||
+    !demoCenter.bookingPoliciesJson ||
+    !demoCenter.notificationSettingsJson
+  ) {
+    await db
+      .update(centers)
+      .set({
+        governorate: demoCenter.governorate || 'منطقة الرياض',
+        street: demoCenter.street || 'طريق الملك فهد',
+        buildingDetails: demoCenter.buildingDetails || 'مبنى المعرفة التعليمي — الدور الثالث',
+        address: demoCenter.address || 'حي العليا — طريق الملك فهد، مبنى المعرفة الدور الثالث',
+        phone: demoCenter.phone || '+966501122334',
+        secondaryPhone: demoCenter.secondaryPhone || '+966114455667',
+        workingHoursJson:
+          demoCenter.workingHoursJson && demoCenter.workingHoursJson.length === 7
+            ? demoCenter.workingHoursJson
+            : DEFAULT_CENTER_WORKING_HOURS,
+        bookingPoliciesJson:
+          demoCenter.bookingPoliciesJson || DEFAULT_CENTER_BOOKING_POLICIES,
+        notificationSettingsJson:
+          demoCenter.notificationSettingsJson || DEFAULT_CENTER_NOTIFICATION_SETTINGS,
+      })
+      .where(eq(centers.id, demoCenter.id));
+  }
+
+  const existingBranches = await db
+    .select({ id: centerBranches.id })
+    .from(centerBranches)
+    .where(eq(centerBranches.centerId, demoCenter.id))
+    .limit(1);
+
+  if (existingBranches.length === 0) {
+    const [mainBranch, onlineBranch] = await db
+      .insert(centerBranches)
+      .values([
+        {
+          centerId: demoCenter.id,
+          name: 'الفرع الرئيسي — العليا',
+          city: 'الرياض',
+          address: 'طريق الملك فهد، برج الأفق التعليمي، الدور 3',
+          phone: '+966501122334',
+          isMain: true,
+          isActive: true,
+        },
+        {
+          centerId: demoCenter.id,
+          name: 'فرع البث المباشر والقاعات الذكية',
+          city: 'جدة',
+          address: 'حي الروضة، مركز الأعمال التقني، الدور 2',
+          phone: '+966509988776',
+          isMain: false,
+          isActive: true,
+        },
+      ])
+      .returning();
+
+    await db.insert(centerRooms).values([
+      {
+        centerId: demoCenter.id,
+        branchId: mainBranch.id,
+        name: 'قاعة الخوارزمي للحاسب',
+        roomNumber: 'A-101',
+        capacity: 24,
+        equipmentNotes: 'شاشة عرض ذكية 4K + أجهزة تدريب وشبكة فائقة السرعة',
+        isActive: true,
+      },
+      {
+        centerId: demoCenter.id,
+        branchId: mainBranch.id,
+        name: 'مختبر هندسة البرمجيات',
+        roomNumber: 'A-102',
+        capacity: 18,
+        equipmentNotes: 'سبورة تفاعلية + منصة عرض لمشاريع التخرج',
+        isActive: true,
+      },
+      {
+        centerId: demoCenter.id,
+        branchId: onlineBranch.id,
+        name: 'استوديو الجلسات التفاعلية',
+        roomNumber: 'ON-01',
+        capacity: 50,
+        equipmentNotes: 'بث عالي الدقة مع نظام إدارة مشاركات مباشر',
+        isActive: true,
+      },
+    ]);
+  }
+
+  const [demoStudent] = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(eq(users.email, 'sara.student@demo.jusoor.edu'))
+    .limit(1);
+
+  if (demoStudent) {
+    const existingCs = await db
+      .select({ id: centerStudents.id })
+      .from(centerStudents)
+      .where(eq(centerStudents.centerId, demoCenter.id))
+      .limit(1);
+
+    if (existingCs.length === 0) {
+      const [univStage] = await db
+        .select({ id: educationalStages.id })
+        .from(educationalStages)
+        .where(eq(educationalStages.slug, 'university'))
+        .limit(1);
+
+      await db
+        .insert(centerStudents)
+        .values({
+          centerId: demoCenter.id,
+          studentUserId: demoStudent.id,
+          phone: '+966554433221',
+          stageId: univStage?.id ?? null,
+          notes: 'طالبة مسجلة في مسار هندسة تطبيقات React و TypeScript',
+          status: 'ACTIVE',
+        })
+        .onConflictDoNothing();
+
+      const [firstCenterCourse] = await db
+        .select({ id: courses.id, instructorUserId: courses.instructorUserId })
+        .from(courses)
+        .where(eq(courses.centerId, demoCenter.id))
+        .limit(1);
+
+      await db.insert(centerAttendance).values([
+        {
+          centerId: demoCenter.id,
+          studentUserId: demoStudent.id,
+          courseId: firstCenterCourse?.id ?? null,
+          teacherUserId: firstCenterCourse?.instructorUserId ?? null,
+          attendanceDate: '2026-11-20',
+          status: 'PRESENT',
+          notes: 'حضور منتظم ومشاركة فعالة في التطبيق العملي',
+          recordedByUserId: demoCenter.ownerUserId,
+        },
+        {
+          centerId: demoCenter.id,
+          studentUserId: demoStudent.id,
+          courseId: firstCenterCourse?.id ?? null,
+          teacherUserId: firstCenterCourse?.instructorUserId ?? null,
+          attendanceDate: '2026-11-24',
+          status: 'PRESENT',
+          notes: 'تسليم نموذج هيكلة TypeScript',
+          recordedByUserId: demoCenter.ownerUserId,
+        },
+      ]);
+
+      await db.insert(centerStudentPayments).values({
+        centerId: demoCenter.id,
+        studentUserId: demoStudent.id,
+        courseId: firstCenterCourse?.id ?? null,
+        amount: '79.00',
+        currency: 'USD',
+        status: 'PAID',
+        paymentMethod: 'CARD',
+        referenceCode: 'CTR-DEMO-2026-001',
+        notes: 'دفعة اشتراك دورة React و TypeScript بالمركز',
+        paidAt: '2026-11-18',
+        recordedByUserId: demoCenter.ownerUserId,
+      });
+    }
   }
 }
 

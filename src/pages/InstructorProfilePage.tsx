@@ -1,24 +1,18 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
-  Award,
-  BookOpen,
-  Building2,
-  CheckCircle2,
-  GraduationCap,
-  Star,
-  UserCheck,
-  Briefcase,
-} from 'lucide-react';
-import {
   apiFetch,
   LANGUAGE_OF_INSTRUCTION_LABELS,
-  LEVEL_LABELS_AR,
   formatCurrencyPrice,
 } from '../lib/api';
 import { SafeImage } from '../components/SafeImage';
 import { TeacherSessionsBookingSection } from '../components/TeacherSessionsBookingSection';
 import { useAuth } from '../context/AuthContext';
+import { PageHeader } from '../components/ui/PageHeader';
+import { StatCard } from '../components/ui/StatCard';
+import { CourseCard } from '../components/ui/CourseCard';
+import { EmptyState } from '../components/ui/EmptyState';
+import { LoadingSkeleton } from '../components/ui/LoadingSkeleton';
 
 interface InstructorPublicResponse {
   instructor: {
@@ -131,43 +125,51 @@ export function InstructorProfilePage() {
 
   if (loading) {
     return (
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-10 space-y-6">
-        <div className="h-52 bg-white border border-slate-200 rounded-xl animate-pulse" />
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {[1, 2, 3].map((i) => (
-            <div
-              key={i}
-              className="h-64 bg-white border border-slate-200 rounded-xl animate-pulse"
-            />
-          ))}
-        </div>
+      <div className="container-xxl px-3 px-sm-4 py-5 space-y-5">
+        <LoadingSkeleton variant="detail" count={1} />
+        <LoadingSkeleton variant="cards" count={3} />
       </div>
     );
   }
 
   if (!data) {
     return (
-      <div className="max-w-3xl mx-auto px-4 py-16 text-center space-y-4">
-        <UserCheck className="w-10 h-10 text-slate-400 mx-auto" />
-        <h1 className="font-display text-2xl font-bold text-slate-900">
-          الملف الشخصي غير متاح
-        </h1>
-        <p className="text-sm text-slate-600">
-          {error || 'لم يتم العثور على هذا المدرّب أو لم يعد ملفه العام منشوراً.'}
-        </p>
-        <div className="flex items-center justify-center gap-3 pt-2">
-          <Link
-            to="/courses"
-            className="px-5 py-2.5 bg-teal-700 hover:bg-teal-800 text-white text-sm font-semibold rounded-lg"
-          >
-            تصفح الدورات
-          </Link>
-          <Link
-            to="/providers"
-            className="px-5 py-2.5 border border-slate-300 text-slate-800 text-sm font-semibold rounded-lg"
-          >
-            دليل المعلّمين والخبراء
-          </Link>
+      <div>
+        <PageHeader
+          title={isAr ? 'الملف الشخصي غير متاح' : 'Profile Not Available'}
+          breadcrumbs={[
+            { label: isAr ? 'الرئيسية' : 'Home', to: '/' },
+            { label: isAr ? 'المعلّمون والخبراء' : 'Providers', to: '/providers' },
+            { label: isAr ? 'غير متاح' : 'Unavailable' },
+          ]}
+        />
+        <div className="container-xxl px-3 px-sm-4 py-5">
+          <EmptyState
+            icon="bi-person-x"
+            title={isAr ? 'الملف الشخصي غير متاح' : 'Instructor profile unavailable'}
+            description={
+              error ||
+              (isAr
+                ? 'لم يتم العثور على هذا المدرّب أو لم يعد ملفه العام منشوراً.'
+                : 'This instructor profile could not be found or is no longer public.')
+            }
+            action={
+              <div className="flex flex-wrap items-center justify-center gap-2">
+                <Link
+                  to="/providers"
+                  className="btn-jusoor-primary px-4 py-2 text-xs sm:text-sm"
+                >
+                  {isAr ? 'دليل المعلّمين والخبراء' : 'Browse Providers'}
+                </Link>
+                <Link
+                  to="/courses"
+                  className="btn-jusoor-outline px-4 py-2 text-xs sm:text-sm"
+                >
+                  {isAr ? 'تصفح الدورات' : 'Browse Courses'}
+                </Link>
+              </div>
+            }
+          />
         </div>
       </div>
     );
@@ -179,426 +181,381 @@ export function InstructorProfilePage() {
     instructor.headline.trim() !== instructor.jobTitle.trim();
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 space-y-8">
-      {/* Breadcrumb */}
-      <nav aria-label="مسار التنقل" className="text-xs text-slate-500 flex items-center gap-2">
-        <Link to="/" className="hover:text-teal-700">
-          الرئيسية
-        </Link>
-        <span aria-hidden="true">/</span>
-        <Link to="/providers" className="hover:text-teal-700">
-          المعلّمون والخبراء
-        </Link>
-        <span aria-hidden="true">/</span>
-        <span className="text-slate-800 font-medium">{instructor.fullName}</span>
-      </nav>
-
-      {/* Instructor Profile Header */}
-      <section className="bg-white border border-slate-200 rounded-xl p-6 sm:p-8">
-        <div className="flex flex-col md:flex-row md:items-start justify-between gap-6">
-          <div className="flex items-start gap-5">
-            {instructor.avatarUrl ? (
-              <div className="w-20 h-20 rounded-2xl overflow-hidden border border-slate-200 shrink-0 bg-slate-100">
-                <SafeImage
-                  src={instructor.avatarUrl}
-                  alt={instructor.fullName}
-                  className="w-full h-full object-cover"
-                />
-              </div>
-            ) : (
-              <div
-                className="w-20 h-20 rounded-2xl bg-teal-50 border border-teal-200 text-teal-800 flex items-center justify-center font-display text-2xl font-extrabold shrink-0"
-                aria-hidden="true"
-              >
-                {getInitials(instructor.fullName)}
-              </div>
-            )}
-
-            <div className="space-y-2">
-              <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
-                <span>
-                  {PROVIDER_TYPE_LABELS[instructor.providerType] || 'مدرّب'}
-                </span>
-                {instructor.verificationStatus === 'VERIFIED' && (
-                  <>
-                    <span aria-hidden="true">·</span>
-                    <span className="inline-flex items-center gap-1 text-teal-800 font-semibold">
-                      <CheckCircle2 className="w-3.5 h-3.5 text-teal-700" />
-                      <span>حساب موثّق</span>
-                    </span>
-                  </>
-                )}
-              </div>
-
-              <h1
-                className="font-display text-2xl sm:text-3xl font-extrabold text-slate-900"
-                dir="auto"
-              >
-                {instructor.fullName}
-              </h1>
-
-              <div
-                className="text-sm font-semibold text-teal-800 flex items-center gap-2"
-                dir="auto"
-              >
-                <Briefcase className="w-4 h-4 shrink-0" />
-                <span>{instructor.jobTitle}</span>
-              </div>
-
-              {showHeadlineSeparately && (
-                <p className="text-xs text-slate-600" dir="auto">
-                  {instructor.headline}
-                </p>
-              )}
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-4 sm:gap-6 pt-4 md:pt-0 border-t md:border-t-0 border-slate-100">
-            <div className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-center min-w-[110px]">
-              <div className="text-xs text-slate-500">التقييم العام</div>
-              <div className="mt-1 flex items-center justify-center gap-1 font-mono-num text-base font-bold text-slate-900">
-                <Star className="w-4 h-4 text-amber-500 fill-amber-500" />
-                <span>{instructor.ratingAvg}</span>
-              </div>
-              <div className="text-[11px] text-slate-500 tabular-nums">
-                ({instructor.reviewsCount} تقييم)
-              </div>
-            </div>
-
-            {instructor.yearsExperience !== null && (
-              <div className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-center min-w-[110px]">
-                <div className="text-xs text-slate-500">سنوات الخبرة</div>
-                <div className="mt-1 font-mono-num text-base font-bold text-slate-900">
-                  {instructor.yearsExperience}+
-                </div>
-                <div className="text-[11px] text-slate-500">سنة</div>
-              </div>
-            )}
-
-            <div className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-center min-w-[110px]">
-              <div className="text-xs text-slate-500">الدورات المنشورة</div>
-              <div className="mt-1 font-mono-num text-base font-bold text-slate-900">
-                {courses.length}
-              </div>
-              <div className="text-[11px] text-slate-500">دورة</div>
-            </div>
-          </div>
-        </div>
-
-        {/* Expertise, Qualifications & Center Affiliations */}
-        {(instructor.qualifications ||
-          instructor.fields.length > 0 ||
-          instructor.centerAffiliations.length > 0) && (
-          <div className="mt-6 pt-6 border-t border-slate-100 grid grid-cols-1 md:grid-cols-3 gap-6">
-            {instructor.qualifications && (
-              <div className="space-y-1.5">
-                <div className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                  <GraduationCap className="w-4 h-4 text-teal-700" />
-                  <span>المؤهلات العلمية</span>
-                </div>
-                <p className="text-sm text-slate-600 leading-relaxed" dir="auto">
-                  {instructor.qualifications}
-                </p>
-              </div>
-            )}
-
-            {instructor.fields.length > 0 && (
-              <div className="space-y-1.5">
-                <div className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                  <Award className="w-4 h-4 text-teal-700" />
-                  <span>مجالات التدريس</span>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {instructor.fields.map((field) => (
-                    <span
-                      key={field}
-                      className="px-2.5 py-1 bg-slate-100 text-slate-700 rounded-lg text-xs font-medium"
-                    >
-                      {field}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {instructor.centerAffiliations.length > 0 && (
-              <div className="space-y-1.5">
-                <div className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                  <Building2 className="w-4 h-4 text-teal-700" />
-                  <span>الانتماء للمراكز التعليمية</span>
-                </div>
-                <div className="space-y-1.5 text-xs text-slate-600">
-                  {instructor.centerAffiliations.map((aff) => (
-                    <div
-                      key={`${aff.centerId}-${aff.jobTitle}`}
-                      className="flex flex-wrap items-center gap-1.5"
-                    >
-                      <Link
-                        to="/centers"
-                        className="font-semibold text-teal-700 hover:underline"
-                      >
-                        {aff.centerName}
-                      </Link>
-                      {aff.jobTitle && (
-                        <>
-                          <span aria-hidden="true">·</span>
-                          <span dir="auto">{aff.jobTitle}</span>
-                        </>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-      </section>
-
-      {/* About Me / Professional Biography */}
-      <section className="bg-white border border-slate-200 rounded-xl p-6 sm:p-8 space-y-3">
-        <div className="flex items-center justify-between gap-4">
-          <h2 className="font-display text-xl font-bold text-slate-900">
-            نبذة عني — About Me
-          </h2>
-        </div>
-        {instructor.bio && instructor.bio.trim().length > 0 ? (
-          <p
-            className="text-sm sm:text-base text-slate-700 leading-relaxed whitespace-pre-line max-w-4xl"
-            dir="auto"
+    <div>
+      <PageHeader
+        kicker={PROVIDER_TYPE_LABELS[instructor.providerType] || (isAr ? 'مدرّب' : 'Instructor')}
+        title={instructor.fullName}
+        subtitle={instructor.jobTitle}
+        breadcrumbs={[
+          { label: isAr ? 'الرئيسية' : 'Home', to: '/' },
+          { label: isAr ? 'المعلّمون والخبراء' : 'Providers', to: '/providers' },
+          { label: instructor.fullName },
+        ]}
+        actions={
+          <Link
+            to="/educational-stages"
+            className="btn-jusoor-outline px-4 py-2 text-xs sm:text-sm inline-flex items-center gap-2 whitespace-nowrap"
           >
-            {instructor.bio}
-          </p>
-        ) : (
-          <p className="text-sm text-slate-500">
-            لم يضف هذا المدرّب نبذة تعريفية بعد.
-          </p>
-        )}
-      </section>
-
-      {/* Curriculum Teaching Assignments */}
-      {instructor.teachingAssignments && instructor.teachingAssignments.length > 0 && (
-        <section
-          className="bg-white border border-slate-200 rounded-xl p-6 sm:p-8 space-y-4"
-          data-testid="instructor-teaching-assignments"
-        >
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-            <div>
-              <h2 className="font-display text-xl font-bold text-slate-900">
-                {isAr
-                  ? 'المواد والصفوف الدراسية التي يدرّسها المعلّم'
-                  : 'Assigned Curriculum Subjects & Grades'}
-              </h2>
-              <p className="text-xs text-slate-600 mt-0.5">
-                {isAr
-                  ? 'اختر أي مادة وصف لعرض الجلسات الفردية والجماعية المخصصة لها مباشرة.'
-                  : 'Select any subject & grade below to filter the sessions offered for it.'}
-              </p>
-            </div>
-            <div className="flex items-center gap-3">
-              {selectedCurriculumSubjectId !== null && (
-                <button
-                  type="button"
-                  onClick={() => setSelectedCurriculumSubjectId(null)}
-                  className="text-xs font-semibold text-slate-700 hover:text-slate-900 underline cursor-pointer"
-                >
-                  {isAr ? 'عرض جميع المواد' : 'Show All Subjects'}
-                </button>
-              )}
-              <Link
-                to="/educational-stages"
-                className="text-xs font-semibold text-teal-700 hover:underline"
-              >
-                {isAr ? 'استعراض المراحل التعليمية' : 'Browse Educational Stages'}
-              </Link>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-            {instructor.teachingAssignments.map((ta) => {
-              const isSelected =
-                selectedCurriculumSubjectId === ta.curriculumSubjectId;
-              const langs = (ta.languagesOffered || [])
-                .map((l) =>
-                  isAr
-                    ? LANGUAGE_OF_INSTRUCTION_LABELS[l]?.ar || l
-                    : LANGUAGE_OF_INSTRUCTION_LABELS[l]?.en || l
-                )
-                .join(' / ');
-              return (
-                <button
-                  key={ta.id}
-                  type="button"
-                  onClick={() =>
-                    setSelectedCurriculumSubjectId(
-                      isSelected ? null : ta.curriculumSubjectId
-                    )
-                  }
-                  aria-pressed={isSelected}
-                  className={`text-start border rounded-xl p-4 space-y-1.5 transition-colors cursor-pointer ${
-                    isSelected
-                      ? 'border-teal-700 bg-teal-50/70'
-                      : 'border-slate-200 bg-slate-50/50 hover:border-teal-600/60'
-                  }`}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-sm font-bold text-slate-900">
-                      {isAr ? ta.subjectNameAr : ta.subjectNameEn}
-                    </span>
-                    {isSelected && (
-                      <span className="text-[11px] font-semibold text-teal-800">
-                        {isAr ? 'محدّد' : 'Selected'}
-                      </span>
-                    )}
-                  </div>
-                  <div className="text-xs text-teal-800 font-medium">
-                    {isAr ? ta.systemNameAr : ta.systemNameEn} ·{' '}
-                    {isAr ? ta.gradeNameAr : ta.gradeNameEn}
-                  </div>
-                  {(ta.divisionNameAr || ta.pathwayNameAr) && (
-                    <div className="text-xs text-slate-600">
-                      {isAr
-                        ? ta.divisionNameAr || ta.pathwayNameAr
-                        : ta.divisionNameEn || ta.pathwayNameEn}
-                    </div>
-                  )}
-                  <div className="text-[11px] text-slate-500 pt-1">
-                    {langs && `${isAr ? 'اللغات:' : 'Lang:'} ${langs}`}
-                    {ta.hourlyRate &&
-                      ` · ${formatCurrencyPrice(
-                        ta.hourlyRate,
-                        ta.currency || 'EGP',
-                        isAr ? 'ar' : 'en'
-                      )}`}
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </section>
-      )}
-
-      {/* Live Individual & Group Sessions by This Instructor */}
-      <TeacherSessionsBookingSection
-        teacherId={instructor.id}
-        curriculumSubjectId={selectedCurriculumSubjectId}
-        teacherAssignments={instructor.teachingAssignments}
-        onSelectCurriculumContext={setSelectedCurriculumSubjectId}
-        showTeacherName={false}
-        title={isAr ? 'الجلسات الفردية والجماعية مع المدرّب' : '1:1 & Group Sessions'}
-        subtitle={
-          isAr
-            ? 'اختر موعداً فردياً (1:1) أو انضم إلى جلسة جماعية أونلاين أو أوفلاين مع هذا المدرّب.'
-            : 'Choose a 1:1 slot or join an online or offline group session with this instructor.'
+            <i className="bi bi-layers" aria-hidden="true" />
+            <span>{isAr ? 'المراحل والمناهج' : 'Educational Stages'}</span>
+          </Link>
         }
       />
 
-      {/* Courses by This Instructor */}
-      <section className="space-y-5">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-          <div>
-            <h2 className="font-display text-2xl font-bold text-slate-900">
-              الدورات التي يقدمها هذا المدرس
-            </h2>
-            <p className="text-sm text-slate-600 mt-1">
-              Courses by This Instructor ({courses.length})
-            </p>
-          </div>
-          <Link
-            to="/providers"
-            className="text-sm font-semibold text-teal-700 hover:underline"
-          >
-            حجز جلسة مباشرة مع المدرّب
-          </Link>
-        </div>
+      <div className="container-xxl px-3 px-sm-4 py-4 py-md-5 space-y-6">
+        {/* Profile Overview Card + KPI Row */}
+        <section className="jusoor-card p-4 p-sm-5 space-y-5">
+          <div className="row g-4 align-items-center">
+            <div className="col-12 col-lg-7">
+              <div className="flex items-start gap-4">
+                {instructor.avatarUrl ? (
+                  <div className="w-20 h-20 rounded-2xl overflow-hidden border border-[#DCE5F0] shrink-0 bg-[#EEF4FA]">
+                    <SafeImage
+                      src={instructor.avatarUrl}
+                      alt={instructor.fullName}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                ) : (
+                  <div
+                    className="w-20 h-20 rounded-2xl bg-[#E8F8F5] border border-[#99E2D8] text-[#0F766E] flex items-center justify-center font-display text-2xl font-extrabold shrink-0"
+                    aria-hidden="true"
+                  >
+                    {getInitials(instructor.fullName)}
+                  </div>
+                )}
 
-        {courses.length === 0 ? (
-          <div className="bg-white border border-slate-200 rounded-xl p-12 text-center space-y-3">
-            <BookOpen className="w-8 h-8 text-slate-400 mx-auto" />
-            <div className="font-semibold text-slate-900">
-              لم ينشر هذا المدرّب أي دورات بعد
-            </div>
-            <p className="text-xs text-slate-500">
-              This instructor has not published any courses yet.
-            </p>
-            <div className="pt-2">
-              <Link
-                to="/courses"
-                className="inline-block px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-lg"
-              >
-                استعراض جميع الدورات المتاحة
-              </Link>
-            </div>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {courses.map((course) => (
-              <article
-                key={course.id}
-                className="bg-white border border-slate-200 hover:border-teal-600 rounded-xl overflow-hidden transition-colors flex flex-col"
-              >
-                <Link
-                  to={`/courses/${course.id}`}
-                  className="block aspect-[4/3] bg-slate-100"
-                >
-                  <SafeImage
-                    src={course.thumbnailUrl}
-                    alt={course.title}
-                    fallbackTitle={course.title}
-                    className="w-full h-full object-cover"
-                  />
-                </Link>
-                <div className="p-5 flex-1 flex flex-col justify-between gap-4">
-                  <div className="space-y-2">
-                    <div className="text-xs text-slate-500 flex flex-wrap items-center gap-1.5">
-                      <span>{course.fieldNameAr}</span>
-                      <span aria-hidden="true">·</span>
-                      <span>{LEVEL_LABELS_AR[course.level] || course.level}</span>
-                      <span aria-hidden="true">·</span>
-                      <span className="tabular-nums">{course.lessonsCount} دروس</span>
-                    </div>
-                    <h3 className="font-display text-base font-bold text-slate-900 leading-snug">
-                      <Link
-                        to={`/courses/${course.id}`}
-                        className="hover:text-teal-700"
-                      >
-                        {course.title}
-                      </Link>
-                    </h3>
-                    <p className="text-xs text-slate-600 line-clamp-2">
-                      {course.subtitle}
-                    </p>
-                    {course.centerName && (
-                      <div className="text-[11px] text-slate-500">
-                        المركز: {course.centerName}
-                      </div>
+                <div className="space-y-1.5 min-w-0">
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-[#64748B]">
+                    <span>
+                      {PROVIDER_TYPE_LABELS[instructor.providerType] || 'مدرّب'}
+                    </span>
+                    {instructor.verificationStatus === 'VERIFIED' && (
+                      <>
+                        <span aria-hidden="true">·</span>
+                        <span className="inline-flex items-center gap-1 text-[#0F766E] font-semibold">
+                          <i className="bi bi-patch-check-fill text-[#20B8A6]" aria-hidden="true" />
+                          <span>{isAr ? 'حساب موثّق' : 'Verified'}</span>
+                        </span>
+                      </>
                     )}
                   </div>
 
-                  <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
-                    <div className="flex items-center gap-3">
-                      <span className="font-mono-num font-bold text-slate-900">
-                        {Number(course.price) === 0 ? 'مجانية' : `$${course.price}`}
-                      </span>
-                      {course.ratingAvg !== null && (
-                        <span className="flex items-center gap-1 text-amber-600 font-mono-num">
-                          <Star className="w-3.5 h-3.5 fill-amber-500" />
-                          {course.ratingAvg}
-                        </span>
-                      )}
-                    </div>
-                    <Link
-                      to={`/courses/${course.id}`}
-                      className="font-semibold text-teal-700 hover:underline"
-                    >
-                      عرض تفاصيل الدورة
-                    </Link>
+                  <div
+                    className="text-sm font-bold text-[#102A43] flex items-center gap-2"
+                    dir="auto"
+                  >
+                    <i className="bi bi-briefcase text-[#247BA0]" aria-hidden="true" />
+                    <span>{instructor.jobTitle}</span>
                   </div>
+
+                  {showHeadlineSeparately && (
+                    <p className="text-xs text-[#64748B] m-0" dir="auto">
+                      {instructor.headline}
+                    </p>
+                  )}
                 </div>
-              </article>
-            ))}
+              </div>
+            </div>
+
+            <div className="col-12 col-lg-5">
+              <div className="row g-2.5">
+                <div className="col-6 col-sm-4">
+                  <StatCard
+                    label={isAr ? 'التقييم العام' : 'Rating'}
+                    value={instructor.ratingAvg}
+                    sublabel={`(${instructor.reviewsCount} ${isAr ? 'تقييم' : 'reviews'})`}
+                    icon="bi-star-fill"
+                    accent="amber"
+                  />
+                </div>
+                {instructor.yearsExperience !== null && (
+                  <div className="col-6 col-sm-4">
+                    <StatCard
+                      label={isAr ? 'سنوات الخبرة' : 'Experience'}
+                      value={`${instructor.yearsExperience}+`}
+                      sublabel={isAr ? 'سنة' : 'yrs'}
+                      icon="bi-award"
+                      accent="blue"
+                    />
+                  </div>
+                )}
+                <div className={instructor.yearsExperience !== null ? 'col-12 col-sm-4' : 'col-6 col-sm-4'}>
+                  <StatCard
+                    label={isAr ? 'الدورات' : 'Courses'}
+                    value={courses.length}
+                    sublabel={isAr ? 'دورة منشورة' : 'published'}
+                    icon="bi-journal-bookmark"
+                    accent="teal"
+                  />
+                </div>
+              </div>
+            </div>
           </div>
+
+          {(instructor.qualifications ||
+            instructor.fields.length > 0 ||
+            instructor.centerAffiliations.length > 0) && (
+            <div className="pt-4 border-t border-[#DCE5F0]">
+              <div className="row g-4">
+                {instructor.qualifications && (
+                  <div className="col-12 col-md-4 space-y-1.5">
+                    <div className="text-xs font-bold text-[#102A43] flex items-center gap-1.5">
+                      <i className="bi bi-mortarboard text-[#247BA0]" aria-hidden="true" />
+                      <span>{isAr ? 'المؤهلات العلمية' : 'Qualifications'}</span>
+                    </div>
+                    <p className="text-sm text-[#172B4D] leading-relaxed m-0" dir="auto">
+                      {instructor.qualifications}
+                    </p>
+                  </div>
+                )}
+
+                {instructor.fields.length > 0 && (
+                  <div className="col-12 col-md-4 space-y-1.5">
+                    <div className="text-xs font-bold text-[#102A43] flex items-center gap-1.5">
+                      <i className="bi bi-bookmark-check text-[#247BA0]" aria-hidden="true" />
+                      <span>{isAr ? 'مجالات التدريس' : 'Teaching Fields'}</span>
+                    </div>
+                    <div className="text-xs text-[#172B4D] leading-relaxed">
+                      {instructor.fields.join(' · ')}
+                    </div>
+                  </div>
+                )}
+
+                {instructor.centerAffiliations.length > 0 && (
+                  <div className="col-12 col-md-4 space-y-1.5">
+                    <div className="text-xs font-bold text-[#102A43] flex items-center gap-1.5">
+                      <i className="bi bi-building text-[#247BA0]" aria-hidden="true" />
+                      <span>{isAr ? 'الانتماء للمراكز التعليمية' : 'Center Affiliations'}</span>
+                    </div>
+                    <div className="space-y-1.5 text-xs text-[#64748B]">
+                      {instructor.centerAffiliations.map((aff) => (
+                        <div
+                          key={`${aff.centerId}-${aff.jobTitle}`}
+                          className="flex flex-wrap items-center gap-1.5"
+                        >
+                          <Link
+                            to="/centers"
+                            className="font-semibold text-[#0F766E] hover:underline"
+                          >
+                            {aff.centerName}
+                          </Link>
+                          {aff.jobTitle && (
+                            <>
+                              <span aria-hidden="true">·</span>
+                              <span dir="auto">{aff.jobTitle}</span>
+                            </>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </section>
+
+        {/* About Me */}
+        <section className="jusoor-card p-4 p-sm-5 space-y-2.5">
+          <h2 className="font-display text-lg font-bold text-[#102A43] m-0">
+            {isAr ? 'نبذة عن المعلّم' : 'About the Instructor'}
+          </h2>
+          {instructor.bio && instructor.bio.trim().length > 0 ? (
+            <p
+              className="text-sm sm:text-base text-[#172B4D] leading-relaxed whitespace-pre-line max-w-4xl m-0"
+              dir="auto"
+            >
+              {instructor.bio}
+            </p>
+          ) : (
+            <p className="text-sm text-[#64748B] m-0">
+              {isAr ? 'لم يضف هذا المدرّب نبذة تعريفية بعد.' : 'No biography provided yet.'}
+            </p>
+          )}
+        </section>
+
+        {/* Curriculum Teaching Assignments */}
+        {instructor.teachingAssignments && instructor.teachingAssignments.length > 0 && (
+          <section
+            className="jusoor-card p-4 p-sm-5 space-y-4"
+            data-testid="instructor-teaching-assignments"
+          >
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <h2 className="font-display text-lg font-bold text-[#102A43] m-0">
+                  {isAr
+                    ? 'المواد والصفوف الدراسية التي يدرّسها المعلّم'
+                    : 'Assigned Curriculum Subjects & Grades'}
+                </h2>
+                <p className="text-xs text-[#64748B] mt-1 mb-0">
+                  {isAr
+                    ? 'اختر أي مادة وصف لعرض الجلسات الفردية والجماعية المخصصة لها مباشرة.'
+                    : 'Select any subject & grade below to filter the sessions offered for it.'}
+                </p>
+              </div>
+              <div className="flex items-center gap-3">
+                {selectedCurriculumSubjectId !== null && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedCurriculumSubjectId(null)}
+                    className="btn-jusoor-outline px-3 py-1.5 text-xs cursor-pointer"
+                  >
+                    {isAr ? 'عرض جميع المواد' : 'Show All Subjects'}
+                  </button>
+                )}
+                <Link
+                  to="/educational-stages"
+                  className="text-xs font-semibold text-[#0F766E] hover:underline"
+                >
+                  {isAr ? 'استعراض المراحل التعليمية' : 'Browse Educational Stages'}
+                </Link>
+              </div>
+            </div>
+
+            <div className="row g-3">
+              {instructor.teachingAssignments.map((ta) => {
+                const isSelected =
+                  selectedCurriculumSubjectId === ta.curriculumSubjectId;
+                const langs = (ta.languagesOffered || [])
+                  .map((l) =>
+                    isAr
+                      ? LANGUAGE_OF_INSTRUCTION_LABELS[l]?.ar || l
+                      : LANGUAGE_OF_INSTRUCTION_LABELS[l]?.en || l
+                  )
+                  .join(' / ');
+                return (
+                  <div key={ta.id} className="col-12 col-md-6 col-lg-4">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setSelectedCurriculumSubjectId(
+                          isSelected ? null : ta.curriculumSubjectId
+                        )
+                      }
+                      aria-pressed={isSelected}
+                      className={`w-full h-full text-start border rounded-xl p-3.5 space-y-1.5 transition-colors cursor-pointer ${
+                        isSelected
+                          ? 'border-[#0F766E] bg-[#E8F8F5]'
+                          : 'border-[#DCE5F0] bg-[#F5F8FC] hover:border-[#247BA0]'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-sm font-bold text-[#102A43]">
+                          {isAr ? ta.subjectNameAr : ta.subjectNameEn}
+                        </span>
+                        {isSelected && (
+                          <span className="text-[11px] font-bold text-[#0F766E]">
+                            {isAr ? 'محدّد' : 'Selected'}
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-xs text-[#247BA0] font-semibold">
+                        {isAr ? ta.systemNameAr : ta.systemNameEn} ·{' '}
+                        {isAr ? ta.gradeNameAr : ta.gradeNameEn}
+                      </div>
+                      {(ta.divisionNameAr || ta.pathwayNameAr) && (
+                        <div className="text-xs text-[#64748B]">
+                          {isAr
+                            ? ta.divisionNameAr || ta.pathwayNameAr
+                            : ta.divisionNameEn || ta.pathwayNameEn}
+                        </div>
+                      )}
+                      <div className="text-[11px] text-[#64748B] pt-1 font-mono-num">
+                        {langs && `${isAr ? 'اللغات:' : 'Lang:'} ${langs}`}
+                        {ta.hourlyRate &&
+                          ` · ${formatCurrencyPrice(
+                            ta.hourlyRate,
+                            ta.currency || 'EGP',
+                            isAr ? 'ar' : 'en'
+                          )}`}
+                      </div>
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
         )}
-      </section>
+
+        {/* Live Individual & Group Sessions */}
+        <TeacherSessionsBookingSection
+          teacherId={instructor.id}
+          curriculumSubjectId={selectedCurriculumSubjectId}
+          teacherAssignments={instructor.teachingAssignments}
+          onSelectCurriculumContext={setSelectedCurriculumSubjectId}
+          showTeacherName={false}
+          title={isAr ? 'الجلسات الفردية والجماعية مع المدرّب' : '1:1 & Group Sessions'}
+          subtitle={
+            isAr
+              ? 'اختر موعداً فردياً (1:1) أو انضم إلى جلسة جماعية أونلاين أو أوفلاين مع هذا المدرّب.'
+              : 'Choose a 1:1 slot or join an online or offline group session with this instructor.'
+          }
+        />
+
+        {/* Courses by This Instructor */}
+        <section className="space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <h2 className="font-display text-xl font-bold text-[#102A43] m-0">
+                {isAr
+                  ? `الدورات التي يقدمها هذا المدرس (${courses.length})`
+                  : `Courses by This Instructor (${courses.length})`}
+              </h2>
+            </div>
+            <Link
+              to="/providers"
+              className="text-xs sm:text-sm font-semibold text-[#0F766E] hover:underline"
+            >
+              {isAr ? 'دليل المعلّمين والخبراء' : 'Browse All Instructors'}
+            </Link>
+          </div>
+
+          {courses.length === 0 ? (
+            <EmptyState
+              icon="bi-journal-bookmark"
+              title={isAr ? 'لم ينشر هذا المدرّب أي دورات بعد' : 'No published courses yet'}
+              description={
+                isAr
+                  ? 'يمكنك حجز جلسة مباشرة مع المدرّب أعلاه أو تصفح الدورات المتاحة على المنصة.'
+                  : 'You can book a direct session above or browse other platform courses.'
+              }
+              action={
+                <Link
+                  to="/courses"
+                  className="btn-jusoor-navy px-4 py-2 text-xs"
+                >
+                  {isAr ? 'استعراض جميع الدورات' : 'Browse All Courses'}
+                </Link>
+              }
+            />
+          ) : (
+            <div className="row g-3 g-md-4">
+              {courses.map((course) => (
+                <div key={course.id} className="col-12 col-md-6 col-lg-4">
+                  <CourseCard
+                    course={{
+                      id: course.id,
+                      title: course.title,
+                      subtitle: course.subtitle,
+                      level: course.level,
+                      price: course.price,
+                      thumbnailUrl: course.thumbnailUrl,
+                      instructorId: instructor.id,
+                      instructorName: instructor.fullName,
+                      fieldNameAr: course.fieldNameAr,
+                      centerName: course.centerName,
+                      lessonsCount: course.lessonsCount,
+                      ratingAvg: course.ratingAvg,
+                    }}
+                    locale={locale}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      </div>
     </div>
   );
 }

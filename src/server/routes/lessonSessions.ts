@@ -575,7 +575,12 @@ router.get('/teaching-sessions', optionalAuth, async (req: AuthRequest, res) => 
         db
           .select({ id: users.id })
           .from(users)
-          .where(ilike(users.fullName, likePattern)),
+          .where(
+            and(
+              ilike(users.fullName, likePattern),
+              eq(users.accountStatus, 'ACTIVE')
+            )
+          ),
         db
           .select({ id: subjects.id })
           .from(subjects)
@@ -611,16 +616,19 @@ router.get('/teaching-sessions', optionalAuth, async (req: AuthRequest, res) => 
       conditions.push(or(...searchParts)!);
     }
 
-    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+    conditions.push(eq(users.accountStatus, 'ACTIVE'));
+    const whereClause = and(...conditions);
 
-    const [[countRow], pagedRows] = await Promise.all([
+    const [[countRow], pagedJoinedRows] = await Promise.all([
       db
         .select({ count: sql<number>`count(*)::int` })
         .from(teachingSessions)
+        .innerJoin(users, eq(teachingSessions.teacherUserId, users.id))
         .where(whereClause),
       db
-        .select()
+        .select({ session: teachingSessions })
         .from(teachingSessions)
+        .innerJoin(users, eq(teachingSessions.teacherUserId, users.id))
         .where(whereClause)
         .orderBy(asc(teachingSessions.startTime))
         .limit(limit)
@@ -628,6 +636,7 @@ router.get('/teaching-sessions', optionalAuth, async (req: AuthRequest, res) => 
     ]);
 
     const total = countRow?.count ?? 0;
+    const pagedRows = pagedJoinedRows.map((r) => r.session);
     const enriched = await enrichSessionsForViewer(pagedRows, req.authUser);
 
     res.json({
@@ -967,23 +976,48 @@ router.get('/teaching-sessions/:id', optionalAuth, async (req: AuthRequest, res)
       return res.status(400).json({ error: 'معرف الجلسة غير صالح.' });
     }
 
-    const [sessionRow] = await db
-      .select()
+    const [sessionJoined] = await db
+      .select({
+        session: teachingSessions,
+        teacherStatus: users.accountStatus,
+      })
       .from(teachingSessions)
+      .innerJoin(users, eq(teachingSessions.teacherUserId, users.id))
       .where(eq(teachingSessions.id, sessionId))
       .limit(1);
 
-    if (!sessionRow) {
+    if (!sessionJoined) {
       return res.status(404).json({ error: 'الجلسة غير موجودة.' });
     }
-
-    const [enriched] = await enrichSessionsForViewer([sessionRow], req.authUser);
+    const sessionRow = sessionJoined.session;
 
     const isTeacherOrAdmin = Boolean(
       req.authUser &&
         (req.authUser.id === sessionRow.teacherUserId ||
           req.authUser.roles.includes('ADMIN'))
     );
+
+    if (sessionJoined.teacherStatus !== 'ACTIVE' && !isTeacherOrAdmin) {
+      let hasEnrollment = false;
+      if (req.authUser) {
+        const [enr] = await db
+          .select({ id: sessionEnrollments.id })
+          .from(sessionEnrollments)
+          .where(
+            and(
+              eq(sessionEnrollments.sessionId, sessionId),
+              eq(sessionEnrollments.studentUserId, req.authUser.id)
+            )
+          )
+          .limit(1);
+        hasEnrollment = Boolean(enr);
+      }
+      if (!hasEnrollment) {
+        return res.status(404).json({ error: 'الجلسة غير موجودة.' });
+      }
+    }
+
+    const [enriched] = await enrichSessionsForViewer([sessionRow], req.authUser);
 
     let enrollmentsList: Array<{
       id: number;
@@ -1829,6 +1863,15 @@ router.post(
       const enrollment = await db.transaction(async (tx) => {
         const locked = await lockSessionRow(tx, sessionId);
         if (!locked) throw new Error('NOT_FOUND');
+
+        const [teacherAccount] = await tx
+          .select({ accountStatus: users.accountStatus })
+          .from(users)
+          .where(eq(users.id, locked.teacher_user_id))
+          .limit(1);
+        if (!teacherAccount || teacherAccount.accountStatus !== 'ACTIVE') {
+          throw new Error('NOT_FOUND');
+        }
 
         if (locked.teacher_user_id === studentId) {
           throw new Error('CANNOT_BOOK_SELF');

@@ -1,5 +1,4 @@
-import { useState } from 'react';
-import { BookOpen } from 'lucide-react';
+import { useEffect, useState } from 'react';
 
 interface SafeImageProps {
   src?: string | null;
@@ -16,16 +15,20 @@ export function SafeImage({
 }: SafeImageProps) {
   const [failed, setFailed] = useState(false);
 
+  useEffect(() => {
+    setFailed(false);
+  }, [src]);
+
   if (!src || failed) {
     return (
       <div
-        className={`flex flex-col items-center justify-center bg-gradient-to-br from-slate-100 via-teal-50/40 to-slate-200 text-slate-600 p-4 text-center ${className}`}
+        className={`flex flex-col items-center justify-center bg-gradient-to-br from-[#EEF4FA] via-[#E8F8F5] to-[#DCE5F0] text-[#102A43] p-4 text-center ${className}`}
         role="img"
         aria-label={alt}
       >
-        <BookOpen className="w-8 h-8 text-teal-700 mb-2" aria-hidden="true" />
+        <i className="bi bi-book-half text-2xl text-[#0F766E] mb-2" aria-hidden="true" />
         {fallbackTitle && (
-          <span className="text-xs font-medium text-slate-700 line-clamp-2">
+          <span className="text-xs font-semibold text-[#102A43] line-clamp-2">
             {fallbackTitle}
           </span>
         )}

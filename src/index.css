@@ -1,23 +1,323 @@
+@layer theme, base, bootstrap, components, utilities;
+@import "bootstrap/dist/css/bootstrap.rtl.min.css" layer(bootstrap);
 @import "tailwindcss";
+
+:root,
+[data-bs-theme="light"] {
+  --jusoor-navy: #102A43;
+  --jusoor-navy-hover: #0B1F33;
+  --jusoor-blue: #247BA0;
+  --jusoor-blue-hover: #1D6483;
+  --jusoor-teal: #20B8A6;
+  --jusoor-teal-ink: #0F766E;
+  --jusoor-teal-ink-hover: #0B5D56;
+  --jusoor-teal-soft: #E8F8F5;
+  --jusoor-bg: #F5F8FC;
+  --jusoor-surface: #FFFFFF;
+  --jusoor-surface-alt: #EEF4FA;
+  --jusoor-text: #172B4D;
+  --jusoor-muted: #64748B;
+  --jusoor-border: #DCE5F0;
+  --jusoor-border-strong: #C5D3E3;
+  --jusoor-shadow-sm: 0 1px 3px rgba(16, 42, 67, 0.05), 0 1px 2px rgba(16, 42, 67, 0.03);
+  --jusoor-shadow-md: 0 10px 28px -8px rgba(16, 42, 67, 0.12);
+  --jusoor-radius: 12px;
+  --jusoor-radius-lg: 16px;
+
+  --bs-primary: #102A43;
+  --bs-primary-rgb: 16, 42, 67;
+  --bs-secondary: #247BA0;
+  --bs-secondary-rgb: 36, 123, 160;
+  --bs-info: #20B8A6;
+  --bs-info-rgb: 32, 184, 166;
+  --bs-body-bg: #F5F8FC;
+  --bs-body-color: #172B4D;
+  --bs-border-color: #DCE5F0;
+  --bs-border-radius: 0.75rem;
+  --bs-border-radius-lg: 1rem;
+  --bs-font-sans-serif: 'IBM Plex Sans Arabic', 'Cairo', system-ui, -apple-system, sans-serif;
+}
 
 @layer base {
   html {
     font-family: 'IBM Plex Sans Arabic', 'Cairo', system-ui, -apple-system, sans-serif;
     scroll-behavior: smooth;
+    background-color: var(--jusoor-bg);
+    color: var(--jusoor-text);
   }
 
-  h1, h2, h3, .font-display {
+  body,
+  .jusoor-body {
+    background-color: var(--jusoor-bg);
+    color: var(--jusoor-text);
+    font-family: 'IBM Plex Sans Arabic', 'Cairo', system-ui, -apple-system, sans-serif;
+    line-height: 1.6;
+    overflow-x: clip;
+  }
+
+  :where(h1, h2, h3, h4) {
     font-family: 'Cairo', 'IBM Plex Sans Arabic', system-ui, sans-serif;
+    color: var(--jusoor-navy);
+    letter-spacing: -0.01em;
   }
 
-  .font-mono-num {
-    font-family: 'IBM Plex Mono', monospace;
-    font-variant-numeric: tabular-nums;
+  .font-display {
+    font-family: 'Cairo', 'IBM Plex Sans Arabic', system-ui, sans-serif;
+    letter-spacing: -0.01em;
+  }
+
+  button:focus-visible,
+  a:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible {
+    outline: 2px solid var(--jusoor-blue);
+    outline-offset: 2px;
   }
 }
 
+@layer components {
+  a {
+    text-decoration: none;
+  }
+}
+
+.font-mono-num,
 .tabular-nums {
+  font-family: 'IBM Plex Mono', 'IBM Plex Sans Arabic', monospace;
   font-variant-numeric: tabular-nums;
+}
+
+/* LTR flip guards when toggling English (LTR) with Bootstrap RTL stylesheet */
+html[dir="ltr"] body {
+  text-align: left;
+}
+html[dir="rtl"] body {
+  text-align: right;
+}
+
+/* JUSOOR Surface & Component Primitives */
+.jusoor-card {
+  background-color: var(--jusoor-surface);
+  border: 1px solid var(--jusoor-border);
+  border-radius: var(--jusoor-radius-lg);
+  box-shadow: var(--jusoor-shadow-sm);
+  transition: border-color 180ms cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 180ms cubic-bezier(0.16, 1, 0.3, 1),
+    transform 180ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.jusoor-card-interactive:hover {
+  border-color: var(--jusoor-blue);
+  box-shadow: var(--jusoor-shadow-md);
+  transform: translateY(-2px);
+}
+
+.jusoor-subcard {
+  background-color: var(--jusoor-bg);
+  border: 1px solid var(--jusoor-border);
+  border-radius: var(--jusoor-radius);
+}
+
+.jusoor-hero-section {
+  background: radial-gradient(circle at 12% 18%, rgba(32, 184, 166, 0.11), transparent 36%),
+    radial-gradient(circle at 86% 12%, rgba(36, 123, 160, 0.10), transparent 42%),
+    linear-gradient(180deg, #FFFFFF 0%, #F5F8FC 100%);
+  border-bottom: 1px solid var(--jusoor-border);
+}
+
+.jusoor-cta-band {
+  background: linear-gradient(135deg, #102A43 0%, #194266 58%, #247BA0 100%);
+  color: #FFFFFF;
+  border-radius: var(--jusoor-radius-lg);
+}
+
+.jusoor-cta-band h2,
+.jusoor-cta-band h3 {
+  color: #FFFFFF;
+}
+
+/* JUSOOR Buttons */
+.btn-jusoor-primary {
+  background-color: var(--jusoor-teal-ink);
+  border: 1px solid var(--jusoor-teal-ink);
+  color: #FFFFFF;
+  font-weight: 600;
+  border-radius: 0.625rem;
+  transition: background-color 150ms ease, border-color 150ms ease, transform 150ms ease;
+}
+
+.btn-jusoor-primary:hover,
+.btn-jusoor-primary:focus-visible {
+  background-color: var(--jusoor-teal-ink-hover);
+  border-color: var(--jusoor-teal-ink-hover);
+  color: #FFFFFF;
+}
+
+.btn-jusoor-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-jusoor-navy {
+  background-color: var(--jusoor-navy);
+  border: 1px solid var(--jusoor-navy);
+  color: #FFFFFF;
+  font-weight: 600;
+  border-radius: 0.625rem;
+  transition: background-color 150ms ease, border-color 150ms ease;
+}
+
+.btn-jusoor-navy:hover,
+.btn-jusoor-navy:focus-visible {
+  background-color: var(--jusoor-navy-hover);
+  border-color: var(--jusoor-navy-hover);
+  color: #FFFFFF;
+}
+
+.btn-jusoor-accent {
+  background-color: var(--jusoor-teal);
+  border: 1px solid var(--jusoor-teal);
+  color: var(--jusoor-navy);
+  font-weight: 700;
+  border-radius: 0.625rem;
+  transition: filter 150ms ease;
+}
+
+.btn-jusoor-accent:hover {
+  filter: brightness(0.95);
+  color: var(--jusoor-navy);
+}
+
+.btn-jusoor-outline {
+  background-color: #FFFFFF;
+  border: 1px solid var(--jusoor-border-strong);
+  color: var(--jusoor-navy);
+  font-weight: 600;
+  border-radius: 0.625rem;
+  transition: border-color 150ms ease, background-color 150ms ease;
+}
+
+.btn-jusoor-outline:hover {
+  background-color: var(--jusoor-surface-alt);
+  border-color: var(--jusoor-blue);
+  color: var(--jusoor-navy);
+}
+
+/* Segmented Tabs */
+.jusoor-tabs {
+  background-color: var(--jusoor-surface-alt);
+  border: 1px solid var(--jusoor-border);
+  border-radius: 0.75rem;
+  padding: 0.25rem;
+}
+
+.jusoor-tab-btn {
+  border-radius: 0.5rem;
+  font-weight: 600;
+  color: var(--jusoor-muted);
+  transition: background-color 150ms ease, color 150ms ease, box-shadow 150ms ease;
+}
+
+.jusoor-tab-btn:hover {
+  color: var(--jusoor-navy);
+}
+
+.jusoor-tab-btn.is-active {
+  background-color: #FFFFFF;
+  color: var(--jusoor-navy);
+  box-shadow: var(--jusoor-shadow-sm);
+}
+
+/* Form Controls */
+.jusoor-input,
+.jusoor-select,
+.jusoor-textarea {
+  background-color: #FFFFFF;
+  border: 1px solid var(--jusoor-border-strong);
+  border-radius: 0.625rem;
+  color: var(--jusoor-text);
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.jusoor-input:focus,
+.jusoor-select:focus,
+.jusoor-textarea:focus {
+  border-color: var(--jusoor-blue);
+  box-shadow: 0 0 0 3px rgba(36, 123, 160, 0.14);
+  outline: none;
+}
+
+/* Clean Tables */
+.table-jusoor {
+  --bs-table-bg: #FFFFFF;
+  --bs-table-striped-bg: #F8FBFE;
+  --bs-table-hover-bg: #F1F6FB;
+  --bs-table-border-color: var(--jusoor-border);
+  margin-bottom: 0;
+}
+
+.table-jusoor thead th {
+  background-color: #F5F8FC;
+  color: var(--jusoor-muted);
+  font-weight: 700;
+  font-size: 0.75rem;
+  border-bottom: 1px solid var(--jusoor-border);
+  padding: 0.75rem 0.85rem;
+  white-space: nowrap;
+}
+
+.table-jusoor tbody td {
+  padding: 0.85rem;
+  vertical-align: middle;
+  color: var(--jusoor-text);
+  border-bottom: 1px solid #EDF2F7;
+}
+
+/* Skeleton Loader */
+.jusoor-skeleton {
+  background: linear-gradient(90deg, #EAF0F6 25%, #F5F8FC 50%, #EAF0F6 75%);
+  background-size: 200% 100%;
+  animation: jusoor-shimmer 1.5s infinite linear;
+  border-radius: var(--jusoor-radius);
+}
+
+@keyframes jusoor-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* Dashboard Sidebar */
+.jusoor-sidebar-nav-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.625rem;
+  width: 100%;
+  padding: 0.65rem 0.85rem;
+  border-radius: 0.625rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--jusoor-text);
+  background: transparent;
+  border: 1px solid transparent;
+  text-align: start;
+  cursor: pointer;
+  transition: background-color 150ms ease, color 150ms ease, border-color 150ms ease;
+}
+
+.jusoor-sidebar-nav-btn:hover {
+  background-color: var(--jusoor-surface-alt);
+  color: var(--jusoor-navy);
+}
+
+.jusoor-sidebar-nav-btn.is-active {
+  background-color: var(--jusoor-navy);
+  color: #FFFFFF;
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -1,30 +1,72 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { CheckCircle2, Lock, PlayCircle, Award, Star, AlertCircle } from 'lucide-react';
-import { apiFetch, LEVEL_LABELS_AR } from '../lib/api';
+import {
+  apiFetch,
+  COURSE_STATUS_LABELS_AR,
+  formatArabicLessonOrdinal,
+  formatCurrencyPrice,
+  LEVEL_LABELS_AR,
+  type ProviderCourseItem,
+} from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { SafeImage } from '../components/SafeImage';
 import { TeacherSessionsBookingSection } from '../components/TeacherSessionsBookingSection';
+import { FormattedLessonContent } from '../components/courses/FormattedLessonContent';
+import { CourseEditorModal } from '../components/courses/CourseEditorModal';
+import { PageHeader } from '../components/ui/PageHeader';
+import { StateBanner } from '../components/ui/StateBanner';
+import { EmptyState } from '../components/ui/EmptyState';
+import { LoadingSkeleton } from '../components/ui/LoadingSkeleton';
 
 interface CourseDetailResponse {
   course: {
     id: number;
     title: string;
+    slug?: string;
     subtitle: string;
     description: string;
-    level: string;
+    level: 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED';
+    language?: string;
     price: string;
+    currency?: string;
     thumbnailUrl: string | null;
+    coverImageKey?: string | null;
+    status?: 'DRAFT' | 'PUBLISHED' | 'PAUSED' | 'CLOSED' | 'ARCHIVED';
     instructorId: number;
     instructorName: string;
+    instructorAvatarUrl?: string | null;
+    instructorHeadline?: string | null;
+    fieldId?: number;
     fieldNameAr: string;
+    customFieldName?: string | null;
+    targetAudience?: string | null;
     subjectId: number | null;
+    subjectNameAr?: string | null;
     stageId: number | null;
+    stageNameAr?: string | null;
+    systemId?: number | null;
+    systemNameAr?: string | null;
+    gradeId?: number | null;
+    gradeNameAr?: string | null;
+    divisionId?: number | null;
+    divisionNameAr?: string | null;
+    pathwayId?: number | null;
+    pathwayNameAr?: string | null;
+    centerId?: number | null;
+    centerName?: string | null;
+    maxStudents?: number | null;
+    enrollmentStatus?: 'OPEN' | 'PAUSED' | 'CLOSED' | null;
+    enrollmentsCount?: number;
+    canManage?: boolean;
+    createdAt?: string;
+    updatedAt?: string;
   };
   lessons: Array<{
     id: number;
+    moduleTitle?: string | null;
     title: string;
     durationMinutes: number;
+    sortOrder?: number;
     isFreePreview: boolean;
     unlocked: boolean;
     content: string;
@@ -88,6 +130,7 @@ export function CourseDetailPage() {
   const [assignmentText, setAssignmentText] = useState('');
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewComment, setReviewComment] = useState('');
+  const [editModalOpen, setEditModalOpen] = useState(false);
 
   const loadCourse = useCallback(async () => {
     setLoading(true);
@@ -210,362 +253,588 @@ export function CourseDetailPage() {
 
   if (loading) {
     return (
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-10">
-        <div className="h-64 bg-white border border-slate-200 rounded-xl animate-pulse" />
+      <div className="container-xxl px-3 px-sm-4 py-5">
+        <LoadingSkeleton variant="detail" />
       </div>
     );
   }
 
   if (!data) {
     return (
-      <div className="max-w-4xl mx-auto px-4 py-16 text-center space-y-3">
-        <p className="text-slate-700 font-semibold">{error || 'الدورة غير متوفرة'}</p>
-        <Link to="/courses" className="text-teal-700 text-sm underline">
-          العودة إلى الدورات
-        </Link>
+      <div className="container-xxl px-3 px-sm-4 py-5">
+        <EmptyState
+          icon="bi-book"
+          title={error || 'الدورة غير متوفرة'}
+          action={
+            <Link to="/courses" className="btn-jusoor-primary px-4 py-2 text-xs">
+              العودة إلى الدورات
+            </Link>
+          }
+        />
       </div>
     );
   }
 
-  const activeLesson =
-    data.lessons.find((l) => l.id === activeLessonId) || data.lessons[0];
+  const activeLessonIndex = data.lessons.findIndex(
+    (l) => l.id === (activeLessonId ?? data.lessons[0]?.id)
+  );
+  const resolvedLessonIndex = activeLessonIndex >= 0 ? activeLessonIndex : 0;
+  const activeLesson = data.lessons[resolvedLessonIndex] || data.lessons[0];
+
+  const editableCoursePayload: ProviderCourseItem | null = data.course.canManage
+    ? {
+        id: data.course.id,
+        title: data.course.title,
+        slug: data.course.slug || '',
+        subtitle: data.course.subtitle,
+        description: data.course.description,
+        customFieldName: data.course.customFieldName || data.course.fieldNameAr,
+        fieldNameAr: data.course.fieldNameAr,
+        targetAudience: data.course.targetAudience || '',
+        fieldId: data.course.fieldId || 1,
+        subjectId: data.course.subjectId,
+        subjectNameAr: data.course.subjectNameAr,
+        stageId: data.course.stageId,
+        stageNameAr: data.course.stageNameAr,
+        systemId: data.course.systemId ?? null,
+        gradeId: data.course.gradeId ?? null,
+        gradeNameAr: data.course.gradeNameAr,
+        divisionId: data.course.divisionId ?? null,
+        pathwayId: data.course.pathwayId ?? null,
+        level: data.course.level,
+        language: data.course.language || 'ar',
+        price: data.course.price,
+        currency: data.course.currency || 'EGP',
+        maxStudents: data.course.maxStudents ?? null,
+        enrollmentStatus: data.course.enrollmentStatus || 'OPEN',
+        thumbnailUrl: data.course.thumbnailUrl,
+        coverImageKey: data.course.coverImageKey ?? null,
+        status: data.course.status || 'PUBLISHED',
+        centerId: data.course.centerId ?? null,
+        instructorId: data.course.instructorId,
+        instructorName: data.course.instructorName,
+        createdAt: data.course.createdAt || '',
+        updatedAt: data.course.updatedAt || '',
+        lessons: data.lessons.map((l, idx) => ({
+          id: l.id,
+          moduleTitle: l.moduleTitle || '',
+          title: l.title,
+          content: l.content,
+          durationMinutes: l.durationMinutes,
+          sortOrder: l.sortOrder ?? idx + 1,
+          isFreePreview: l.isFreePreview,
+        })),
+        lessonsCount: data.lessons.length,
+        enrollmentsCount: data.course.enrollmentsCount ?? 0,
+      }
+    : null;
+
+  const educationalClassification = [
+    data.course.subjectNameAr,
+    data.course.stageNameAr,
+    data.course.systemNameAr,
+    data.course.gradeNameAr,
+    data.course.divisionNameAr,
+    data.course.pathwayNameAr,
+  ].filter(Boolean);
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 space-y-8">
-      {/* Header Banner */}
-      <div className="bg-white border border-slate-200 rounded-xl p-6 lg:p-8 grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
-        <div className="lg:col-span-8 space-y-4">
-          <div className="text-xs text-slate-500 flex flex-wrap items-center gap-2">
-            <span>{data.course.fieldNameAr}</span>
-            <span aria-hidden="true">·</span>
-            <span>{LEVEL_LABELS_AR[data.course.level] || data.course.level}</span>
-            <span aria-hidden="true">·</span>
-            <span>
-              المدرّب:{' '}
-              <Link
-                to={`/instructors/${data.course.instructorId}`}
-                className="font-semibold text-teal-700 hover:underline"
-              >
-                {data.course.instructorName}
-              </Link>
-            </span>
-          </div>
-          <h1 className="font-display text-2xl sm:text-3xl font-extrabold text-slate-900">
-            {data.course.title}
-          </h1>
-          <p className="text-sm text-slate-600 leading-relaxed">
-            {data.course.description}
-          </p>
-
-          {data.progress && (
-            <div className="pt-2 space-y-1.5 max-w-md">
-              <div className="flex items-center justify-between text-xs font-medium text-slate-700">
-                <span>تقدمك في الدورة</span>
-                <span className="font-mono-num">
-                  {data.progress.completionPercent}% ({data.progress.completedLessonsCount}/
-                  {data.progress.totalLessonsCount})
-                </span>
-              </div>
-              <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-teal-700 transition-all"
-                  style={{ width: `${data.progress.completionPercent}%` }}
-                />
-              </div>
-            </div>
-          )}
-
-          {!data.enrollment ? (
-            <div className="pt-2 flex flex-wrap items-center gap-4">
+    <div>
+      <PageHeader
+        breadcrumbs={[
+          { label: 'الرئيسية', to: '/' },
+          { label: 'الدورات', to: '/courses' },
+          { label: data.course.title },
+        ]}
+        kicker={`${data.course.fieldNameAr} · ${
+          LEVEL_LABELS_AR[data.course.level] || data.course.level
+        }`}
+        title={data.course.title}
+        subtitle={data.course.subtitle}
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            {data.course.canManage && (
               <button
                 type="button"
-                onClick={handleEnroll}
-                className="px-6 py-3 bg-teal-700 hover:bg-teal-800 text-white text-sm font-semibold rounded-lg cursor-pointer"
+                onClick={() => setEditModalOpen(true)}
+                data-testid="course-detail-edit-btn"
+                className="btn-jusoor-primary px-4 py-2 text-xs inline-flex items-center gap-1.5 cursor-pointer"
               >
-                {Number(data.course.price) === 0
-                  ? 'التسجيل المجاني في الدورة'
-                  : `التسجيل في الدورة ($${data.course.price})`}
+                <i className="bi bi-pencil-square" aria-hidden="true" />
+                <span>تعديل الدورة والدروس</span>
               </button>
-              <span className="text-xs text-slate-500">
-                {Number(data.course.price) > 0 &&
-                  'تُسجل المعاملة المالية في سجل الدفع التجريبي (Sandbox)'}
-              </span>
-            </div>
-          ) : (
-            <div className="inline-flex items-center gap-2 text-xs font-semibold text-teal-800 bg-teal-50 px-3 py-1.5 rounded-lg border border-teal-200">
-              <Award className="w-4 h-4" />
-              <span>أنت مسجل في هذه الدورة</span>
-            </div>
-          )}
-        </div>
-
-        <div className="lg:col-span-4 aspect-[4/3] rounded-xl overflow-hidden border border-slate-200">
-          <SafeImage
-            src={data.course.thumbnailUrl}
-            alt={data.course.title}
-            fallbackTitle={data.course.title}
-            className="w-full h-full object-cover"
-          />
-        </div>
-      </div>
-
-      {feedback && (
-        <div className="p-4 rounded-xl bg-teal-50 border border-teal-200 text-sm text-teal-900">
-          {feedback}
-        </div>
-      )}
-      {error && (
-        <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-sm text-red-800 flex items-center gap-2">
-          <AlertCircle className="w-4 h-4 shrink-0" />
-          <span>{error}</span>
-        </div>
-      )}
-
-      {/* Curriculum + Lesson Viewer */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        <div className="lg:col-span-5 bg-white border border-slate-200 rounded-xl p-5 space-y-3">
-          <h2 className="font-display text-lg font-bold text-slate-900">
-            منهج الدورة ({data.lessons.length} دروس)
-          </h2>
-          <div className="divide-y divide-slate-100">
-            {data.lessons.map((lesson) => (
-              <button
-                key={lesson.id}
-                type="button"
-                onClick={() => setActiveLessonId(lesson.id)}
-                className={`w-full text-right py-3 px-3 rounded-lg transition-colors flex items-center justify-between gap-3 cursor-pointer ${
-                  activeLesson?.id === lesson.id
-                    ? 'bg-teal-50/70 text-teal-900'
-                    : 'hover:bg-slate-50 text-slate-800'
-                }`}
-              >
-                <div className="flex items-center gap-2.5 min-w-0">
-                  {lesson.completed ? (
-                    <CheckCircle2 className="w-4 h-4 text-teal-700 shrink-0" />
-                  ) : lesson.unlocked ? (
-                    <PlayCircle className="w-4 h-4 text-slate-600 shrink-0" />
-                  ) : (
-                    <Lock className="w-4 h-4 text-slate-400 shrink-0" />
-                  )}
-                  <span className="text-sm font-medium truncate">
-                    {lesson.title}
-                  </span>
-                </div>
-                <span className="text-xs font-mono-num text-slate-500 shrink-0">
-                  {lesson.durationMinutes} د
-                </span>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="lg:col-span-7 bg-white border border-slate-200 rounded-xl p-6 space-y-4">
-          {activeLesson ? (
-            <>
-              <div className="flex items-center justify-between gap-4 pb-3 border-b border-slate-100">
-                <h2 className="font-display text-lg font-bold text-slate-900">
-                  {activeLesson.title}
-                </h2>
-                <span className="text-xs font-mono-num text-slate-500">
-                  {activeLesson.durationMinutes} دقيقة
-                </span>
-              </div>
-              <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-line">
-                {activeLesson.content}
-              </p>
-              {data.enrollment && activeLesson.unlocked && (
-                <div className="pt-3">
-                  <button
-                    type="button"
-                    disabled={activeLesson.completed}
-                    onClick={() => handleCompleteLesson(activeLesson.id)}
-                    className={`px-4 py-2 text-sm font-semibold rounded-lg cursor-pointer ${
-                      activeLesson.completed
-                        ? 'bg-slate-100 text-slate-600 cursor-default'
-                        : 'bg-teal-700 hover:bg-teal-800 text-white'
-                    }`}
-                  >
-                    {activeLesson.completed
-                      ? 'تم إتمام هذا الدرس'
-                      : 'تحديد الدرس كمكتمل'}
-                  </button>
-                </div>
-              )}
-            </>
-          ) : (
-            <p className="text-sm text-slate-500">اختر درساً للعرض.</p>
-          )}
-        </div>
-      </div>
-
-      {/* Quizzes & Assignments for Enrolled Students */}
-      {data.enrollment && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {data.quizzes.map((quiz) => (
-            <div
-              key={quiz.id}
-              className="bg-white border border-slate-200 rounded-xl p-6 space-y-4"
+            )}
+            <Link
+              to={`/instructors/${data.course.instructorId}`}
+              className="btn-jusoor-outline px-4 py-2 text-xs inline-flex items-center gap-2"
             >
-              <div className="flex items-center justify-between">
-                <h3 className="font-display text-lg font-bold text-slate-900">
-                  {quiz.title}
-                </h3>
-                <span className="text-xs font-mono-num text-slate-500">
-                  النجاح: {quiz.passingScore}%
-                </span>
-              </div>
-              {quiz.questions.map((q) => (
-                <div key={q.id} className="space-y-2 pt-2 border-t border-slate-100">
-                  <div className="text-sm font-semibold text-slate-800">
-                    {q.questionText}
-                  </div>
-                  <div className="space-y-1.5">
-                    {q.answers.map((ans) => (
-                      <label
-                        key={ans.id}
-                        className="flex items-center gap-2 text-xs text-slate-700 cursor-pointer"
-                      >
-                        <input
-                          type="radio"
-                          name={`q-${q.id}`}
-                          checked={quizSelection[q.id] === ans.id}
-                          onChange={() =>
-                            setQuizSelection((prev) => ({
-                              ...prev,
-                              [q.id]: ans.id,
-                            }))
-                          }
-                        />
-                        <span>{ans.answerText}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              ))}
-              <button
-                type="button"
-                onClick={() => handleSubmitQuiz(quiz.id)}
-                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-lg cursor-pointer"
-              >
-                إرسال الإجابات والتصحيح التلقائي
-              </button>
-
-              {quiz.attempts.length > 0 && (
-                <div className="pt-2 text-xs text-slate-600">
-                  آخر محاولة: {quiz.attempts[0].score} / {quiz.attempts[0].maxScore} (
-                  {quiz.attempts[0].passed ? 'ناجح' : 'حاول مجدداً'})
-                </div>
-              )}
-            </div>
-          ))}
-
-          {data.assignments.map((assign) => (
-            <div
-              key={assign.id}
-              className="bg-white border border-slate-200 rounded-xl p-6 space-y-4"
-            >
-              <h3 className="font-display text-lg font-bold text-slate-900">
-                {assign.title}
-              </h3>
-              <p className="text-xs text-slate-600 leading-relaxed">
-                {assign.instructions}
-              </p>
-              <form
-                onSubmit={(e) => handleSubmitAssignment(e, assign.id)}
-                className="space-y-3"
-              >
-                <textarea
-                  required
-                  rows={3}
-                  value={assignmentText}
-                  onChange={(e) => setAssignmentText(e.target.value)}
-                  placeholder="اكتب حل التكليف أو رابط المشروع التطبيقي..."
-                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg"
-                />
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-teal-700 hover:bg-teal-800 text-white text-xs font-semibold rounded-lg cursor-pointer"
-                >
-                  تسليم التكليف
-                </button>
-              </form>
-              {assign.submissions.length > 0 && (
-                <div className="pt-2 border-t border-slate-100 text-xs text-slate-600">
-                  تم التسليم ({assign.submissions.length}) — الحالة:{' '}
-                  {assign.submissions[0].status}
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Instructor Live Individual & Group Sessions */}
-      <TeacherSessionsBookingSection
-        teacherId={data.course.instructorId}
-        showTeacherName={false}
-        title="جلسات فردية وجماعية مباشرة مع مدرّب الدورة"
-        subtitle="احجز جلسة فردية (1:1) أو انضم إلى ورشة جماعية لتطبيق مفاهيم هذه الدورة مباشرة مع المدرّب."
+              <i className="bi bi-person-badge text-[#0F766E]" aria-hidden="true" />
+              <span>المدرّب: {data.course.instructorName}</span>
+            </Link>
+          </div>
+        }
       />
 
-      {/* Course Reviews */}
-      <div className="bg-white border border-slate-200 rounded-xl p-6 space-y-4">
-        <h3 className="font-display text-lg font-bold text-slate-900">
-          تقييمات المتعلّمين ({data.reviews.length})
-        </h3>
-        {data.reviews.length > 0 && (
-          <div className="divide-y divide-slate-100">
-            {data.reviews.map((rev) => (
-              <div key={rev.id} className="py-3 space-y-1">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="font-semibold text-slate-900">
-                    {rev.authorName}
+      <div className="container-xxl px-3 px-sm-4 py-4 py-md-5 space-y-5">
+        {data.course.status && data.course.status !== 'PUBLISHED' && (
+          <StateBanner
+            variant="warning"
+            message={`حالة هذه الدورة حالياً: ${
+              COURSE_STATUS_LABELS_AR[data.course.status] || data.course.status
+            } — تظهر لك فقط بصفتك مالك/مدير الدورة ولا تظهر للجمهور حتى يتم نشرها.`}
+          />
+        )}
+
+        {/* Course Summary & Enrollment Card */}
+        <div className="jusoor-card p-4 sm:p-6">
+          <div className="row g-4 align-items-center">
+            <div className="col-12 col-lg-8 space-y-4">
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                <span className="px-2.5 py-1 rounded-md bg-[#E8F8F5] text-[#0F766E] font-bold">
+                  المجال: {data.course.fieldNameAr}
+                </span>
+                <span className="px-2.5 py-1 rounded-md bg-[#EEF4FA] text-[#102A43] font-semibold">
+                  المستوى: {LEVEL_LABELS_AR[data.course.level] || data.course.level}
+                </span>
+                <span className="px-2.5 py-1 rounded-md bg-[#F8FBFF] border border-[#DCE5F0] text-[#102A43] font-mono-num font-bold">
+                  {formatCurrencyPrice(
+                    data.course.price,
+                    data.course.currency || 'USD'
+                  )}
+                </span>
+                {data.course.centerName && (
+                  <span className="px-2.5 py-1 rounded-md bg-[#F8FBFF] border border-[#DCE5F0] text-[#64748B] font-semibold">
+                    {data.course.centerName}
                   </span>
-                  <span className="flex items-center gap-1 text-amber-600 font-mono-num">
-                    <Star className="w-3.5 h-3.5 fill-amber-500" />
-                    {rev.rating}/5
+                )}
+              </div>
+
+              <p className="text-sm text-[#172B4D] leading-relaxed whitespace-pre-line m-0">
+                {data.course.description}
+              </p>
+
+              {data.course.targetAudience && (
+                <div className="text-xs text-[#172B4D] bg-[#F8FBFF] border border-[#DCE5F0] rounded-lg px-3 py-2 flex items-start gap-2">
+                  <i
+                    className="bi bi-people-fill text-[#247BA0] shrink-0 mt-0.5"
+                    aria-hidden="true"
+                  />
+                  <span>
+                    <strong>الفئة المستهدفة:</strong> {data.course.targetAudience}
                   </span>
                 </div>
-                <p className="text-sm text-slate-700">{rev.comment}</p>
+              )}
+
+              {educationalClassification.length > 0 && (
+                <div className="text-xs text-[#64748B] flex flex-wrap items-center gap-1.5">
+                  <span className="font-bold text-[#102A43]">
+                    التصنيف الدراسي:
+                  </span>
+                  {educationalClassification.map((part, idx) => (
+                    <React.Fragment key={`${part}-${idx}`}>
+                      {idx > 0 && <span aria-hidden="true">·</span>}
+                      <span>{part}</span>
+                    </React.Fragment>
+                  ))}
+                </div>
+              )}
+
+              {data.progress && (
+                <div className="space-y-1.5 max-w-md">
+                  <div className="flex items-center justify-between text-xs font-semibold text-[#102A43]">
+                    <span>تقدمك في الدورة</span>
+                    <span className="font-mono-num">
+                      {data.progress.completionPercent}% (
+                      {data.progress.completedLessonsCount}/
+                      {data.progress.totalLessonsCount})
+                    </span>
+                  </div>
+                  <div className="h-2 bg-[#EEF4FA] rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-[#20B8A6] transition-all"
+                      style={{ width: `${data.progress.completionPercent}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {!data.enrollment ? (
+                <div className="flex flex-wrap items-center gap-3 pt-1">
+                  {data.course.enrollmentStatus === 'PAUSED' ||
+                  data.course.enrollmentStatus === 'CLOSED' ||
+                  (data.course.maxStudents &&
+                    (data.course.enrollmentsCount ?? 0) >= data.course.maxStudents) ? (
+                    <span className="inline-flex items-center gap-2 text-xs font-bold text-[#92400E] bg-[#FFFBEB] px-3.5 py-2 rounded-lg border border-[#FDE68A]">
+                      <i className="bi bi-pause-circle-fill" aria-hidden="true" />
+                      <span>
+                        {data.course.enrollmentStatus === 'PAUSED'
+                          ? 'التسجيل متوقف مؤقتاً لهذه الدورة'
+                          : data.course.enrollmentStatus === 'CLOSED'
+                          ? 'التسجيل مغلق لهذه الدورة'
+                          : 'اكتمل الحد الأقصى للطلاب في هذه الدورة'}
+                      </span>
+                    </span>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        onClick={handleEnroll}
+                        className="btn-jusoor-primary px-5 py-2.5 text-sm cursor-pointer"
+                      >
+                        {Number(data.course.price) === 0
+                          ? 'التسجيل المجاني في الدورة'
+                          : `التسجيل في الدورة (${formatCurrencyPrice(
+                              data.course.price,
+                              data.course.currency || 'USD'
+                            )})`}
+                      </button>
+                      {Number(data.course.price) > 0 && (
+                        <span className="text-xs text-[#64748B]">
+                          تُسجل المعاملة المالية في سجل الدفع التجريبي (Sandbox)
+                        </span>
+                      )}
+                    </>
+                  )}
+                </div>
+              ) : (
+                <div className="inline-flex items-center gap-2 text-xs font-bold text-[#0F766E] bg-[#E8F8F5] px-3.5 py-2 rounded-lg border border-[#99E2D8]">
+                  <i className="bi bi-award-fill" aria-hidden="true" />
+                  <span>أنت مسجل في هذه الدورة</span>
+                </div>
+              )}
+            </div>
+
+            <div className="col-12 col-lg-4">
+              <div className="aspect-[4/3] rounded-xl overflow-hidden border border-[#DCE5F0]">
+                <SafeImage
+                  src={data.course.thumbnailUrl}
+                  alt={data.course.title}
+                  fallbackTitle={data.course.title}
+                  className="w-full h-full object-cover"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {feedback && (
+          <StateBanner
+            variant="success"
+            message={feedback}
+            onDismiss={() => setFeedback(null)}
+          />
+        )}
+        {error && (
+          <StateBanner
+            variant="error"
+            message={error}
+            onDismiss={() => setError(null)}
+          />
+        )}
+
+        {/* Curriculum + Lesson Viewer */}
+        <div className="row g-4">
+          <div className="col-12 col-lg-5">
+            <div className="jusoor-card p-4 sm:p-5 h-full space-y-3">
+              <h2 className="font-display text-lg font-bold text-[#102A43] m-0">
+                محتوى الدورة ({data.lessons.length} دروس)
+              </h2>
+              {data.lessons.length === 0 ? (
+                <p className="text-xs text-[#64748B] m-0">
+                  لم تُضف دروس لهذه الدورة بعد.
+                </p>
+              ) : (
+                <div className="divide-y divide-[#EDF2F7]">
+                  {data.lessons.map((lesson, idx) => (
+                    <button
+                      key={lesson.id}
+                      type="button"
+                      onClick={() => setActiveLessonId(lesson.id)}
+                      data-testid={`course-detail-lesson-btn-${idx}`}
+                      className={`w-full text-start py-3 px-3 rounded-lg transition-colors flex items-center justify-between gap-3 cursor-pointer ${
+                        activeLesson?.id === lesson.id
+                          ? 'bg-[#E8F8F5] text-[#0B4F4A]'
+                          : 'hover:bg-[#F5F8FC] text-[#172B4D]'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <i
+                          className={`bi ${
+                            lesson.completed
+                              ? 'bi-check-circle-fill text-[#0F766E]'
+                              : lesson.unlocked
+                              ? 'bi-play-circle text-[#247BA0]'
+                              : 'bi-lock text-[#64748B]'
+                          } shrink-0`}
+                          aria-hidden="true"
+                        />
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="text-[11px] font-bold text-[#0F766E]">
+                              {formatArabicLessonOrdinal(idx)}
+                            </span>
+                            {lesson.moduleTitle && (
+                              <span className="text-[10px] font-bold text-[#247BA0] truncate">
+                                · {lesson.moduleTitle}
+                              </span>
+                            )}
+                            {lesson.isFreePreview && !data.enrollment && (
+                              <span className="text-[10px] font-semibold text-[#0F766E] bg-[#E8F8F5] px-1.5 py-0.5 rounded">
+                                معاينة مجانية
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-sm font-semibold truncate block">
+                            {lesson.title}
+                          </span>
+                        </div>
+                      </div>
+                      <span className="text-xs font-mono-num text-[#64748B] shrink-0">
+                        {lesson.durationMinutes} د
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="col-12 col-lg-7">
+            <div className="jusoor-card p-4 sm:p-6 h-full space-y-4">
+              {activeLesson ? (
+                <>
+                  <div className="flex items-center justify-between gap-4 pb-3 border-b border-[#EDF2F7]">
+                    <div className="space-y-0.5 min-w-0">
+                      <div className="text-xs font-bold text-[#0F766E]">
+                        {formatArabicLessonOrdinal(resolvedLessonIndex)}
+                        {activeLesson.moduleTitle
+                          ? ` — ${activeLesson.moduleTitle}`
+                          : ''}
+                      </div>
+                      <h2 className="font-display text-lg font-bold text-[#102A43] m-0">
+                        {activeLesson.title}
+                      </h2>
+                    </div>
+                    <span className="text-xs font-mono-num text-[#64748B] shrink-0">
+                      {activeLesson.durationMinutes} دقيقة
+                    </span>
+                  </div>
+
+                  <FormattedLessonContent content={activeLesson.content} />
+
+                  {data.enrollment && activeLesson.unlocked && (
+                    <div className="pt-2">
+                      <button
+                        type="button"
+                        disabled={activeLesson.completed}
+                        onClick={() => handleCompleteLesson(activeLesson.id)}
+                        className={`px-4 py-2 text-sm font-semibold rounded-lg ${
+                          activeLesson.completed
+                            ? 'bg-[#EEF4FA] text-[#64748B] cursor-default'
+                            : 'btn-jusoor-primary cursor-pointer'
+                        }`}
+                      >
+                        {activeLesson.completed
+                          ? 'تم إتمام هذا الدرس'
+                          : 'تحديد الدرس كمكتمل'}
+                      </button>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <p className="text-sm text-[#64748B] m-0">اختر درساً للعرض.</p>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Quizzes & Assignments */}
+        {data.enrollment && (
+          <div className="row g-4">
+            {data.quizzes.map((quiz) => (
+              <div key={quiz.id} className="col-12 col-lg-6">
+                <div className="jusoor-card p-5 space-y-4 h-full">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-display text-lg font-bold text-[#102A43] m-0">
+                      {quiz.title}
+                    </h3>
+                    <span className="text-xs font-mono-num text-[#64748B]">
+                      النجاح: {quiz.passingScore}%
+                    </span>
+                  </div>
+                  {quiz.questions.map((q) => (
+                    <div
+                      key={q.id}
+                      className="space-y-2 pt-2 border-t border-[#EDF2F7]"
+                    >
+                      <div className="text-sm font-semibold text-[#102A43]">
+                        {q.questionText}
+                      </div>
+                      <div className="space-y-1.5">
+                        {q.answers.map((ans) => (
+                          <label
+                            key={ans.id}
+                            className="flex items-center gap-2 text-xs text-[#172B4D] cursor-pointer"
+                          >
+                            <input
+                              type="radio"
+                              name={`q-${q.id}`}
+                              checked={quizSelection[q.id] === ans.id}
+                              onChange={() =>
+                                setQuizSelection((prev) => ({
+                                  ...prev,
+                                  [q.id]: ans.id,
+                                }))
+                              }
+                            />
+                            <span>{ans.answerText}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => handleSubmitQuiz(quiz.id)}
+                    className="btn-jusoor-navy px-4 py-2 text-xs cursor-pointer"
+                  >
+                    إرسال الإجابات والتصحيح التلقائي
+                  </button>
+
+                  {quiz.attempts.length > 0 && (
+                    <div className="pt-2 text-xs text-[#64748B]">
+                      آخر محاولة: {quiz.attempts[0].score} /{' '}
+                      {quiz.attempts[0].maxScore} (
+                      {quiz.attempts[0].passed ? 'ناجح' : 'حاول مجدداً'})
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+
+            {data.assignments.map((assign) => (
+              <div key={assign.id} className="col-12 col-lg-6">
+                <div className="jusoor-card p-5 space-y-4 h-full">
+                  <h3 className="font-display text-lg font-bold text-[#102A43] m-0">
+                    {assign.title}
+                  </h3>
+                  <p className="text-xs text-[#64748B] leading-relaxed m-0">
+                    {assign.instructions}
+                  </p>
+                  <form
+                    onSubmit={(e) => handleSubmitAssignment(e, assign.id)}
+                    className="space-y-3"
+                  >
+                    <textarea
+                      required
+                      rows={3}
+                      value={assignmentText}
+                      onChange={(e) => setAssignmentText(e.target.value)}
+                      placeholder="اكتب حل التكليف أو رابط المشروع التطبيقي..."
+                      className="jusoor-textarea w-full px-3 py-2 text-sm"
+                    />
+                    <button
+                      type="submit"
+                      className="btn-jusoor-primary px-4 py-2 text-xs cursor-pointer"
+                    >
+                      تسليم التكليف
+                    </button>
+                  </form>
+                  {assign.submissions.length > 0 && (
+                    <div className="pt-2 border-t border-[#EDF2F7] text-xs text-[#64748B]">
+                      تم التسليم ({assign.submissions.length}) — الحالة:{' '}
+                      {assign.submissions[0].status}
+                    </div>
+                  )}
+                </div>
               </div>
             ))}
           </div>
         )}
 
-        {user && (
-          <form
-            onSubmit={handleSubmitReview}
-            className="pt-4 border-t border-slate-200 flex flex-col sm:flex-row gap-3"
-          >
-            <select
-              value={reviewRating}
-              onChange={(e) => setReviewRating(Number(e.target.value))}
-              aria-label="التقييم"
-              className="px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white"
+        {/* Instructor Live Sessions */}
+        <TeacherSessionsBookingSection
+          teacherId={data.course.instructorId}
+          showTeacherName={false}
+          title="جلسات فردية وجماعية مباشرة مع مدرّب الدورة"
+          subtitle="احجز جلسة فردية (1:1) أو انضم إلى ورشة جماعية لتطبيق مفاهيم هذه الدورة مباشرة مع المدرّب."
+        />
+
+        {/* Course Reviews */}
+        <div className="jusoor-card p-4 sm:p-6 space-y-4">
+          <h3 className="font-display text-lg font-bold text-[#102A43] m-0">
+            تقييمات المتعلّمين ({data.reviews.length})
+          </h3>
+          {data.reviews.length > 0 ? (
+            <div className="divide-y divide-[#EDF2F7]">
+              {data.reviews.map((rev) => (
+                <div key={rev.id} className="py-3 space-y-1">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-bold text-[#102A43]">
+                      {rev.authorName}
+                    </span>
+                    <span className="inline-flex items-center gap-1 text-[#B45309] font-mono-num font-bold">
+                      <i className="bi bi-star-fill text-[#F59E0B]" aria-hidden="true" />
+                      {rev.rating}/5
+                    </span>
+                  </div>
+                  <p className="text-sm text-[#172B4D] m-0">{rev.comment}</p>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-[#64748B] m-0">
+              لا توجد تقييمات لهذه الدورة بعد.
+            </p>
+          )}
+
+          {user && (
+            <form
+              onSubmit={handleSubmitReview}
+              className="pt-4 border-t border-[#DCE5F0] flex flex-col sm:flex-row gap-3"
             >
-              <option value={5}>5 نجوم</option>
-              <option value={4}>4 نجوم</option>
-              <option value={3}>3 نجوم</option>
-              <option value={2}>نجمتان</option>
-              <option value={1}>نجمة واحدة</option>
-            </select>
-            <input
-              type="text"
-              required
-              value={reviewComment}
-              onChange={(e) => setReviewComment(e.target.value)}
-              placeholder="شارك تجربتك في هذه الدورة..."
-              className="flex-1 px-3 py-2 text-sm border border-slate-300 rounded-lg"
-            />
-            <button
-              type="submit"
-              className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold rounded-lg cursor-pointer"
-            >
-              إرسال التقييم
-            </button>
-          </form>
-        )}
+              <select
+                value={reviewRating}
+                onChange={(e) => setReviewRating(Number(e.target.value))}
+                aria-label="التقييم"
+                className="jusoor-select px-3 py-2 text-sm"
+              >
+                <option value={5}>5 نجوم</option>
+                <option value={4}>4 نجوم</option>
+                <option value={3}>3 نجوم</option>
+                <option value={2}>نجمتان</option>
+                <option value={1}>نجمة واحدة</option>
+              </select>
+              <input
+                type="text"
+                required
+                value={reviewComment}
+                onChange={(e) => setReviewComment(e.target.value)}
+                placeholder="شارك تجربتك في هذه الدورة..."
+                className="jusoor-input flex-1 px-3 py-2 text-sm"
+              />
+              <button
+                type="submit"
+                className="btn-jusoor-navy px-4 py-2 text-sm cursor-pointer whitespace-nowrap"
+              >
+                إرسال التقييم
+              </button>
+            </form>
+          )}
+        </div>
       </div>
+
+      {editableCoursePayload && (
+        <CourseEditorModal
+          open={editModalOpen}
+          initialCourse={editableCoursePayload}
+          onClose={() => setEditModalOpen(false)}
+          onSaved={async () => {
+            setFeedback('تم حفظ تعديلات الدورة والمحتوى بنجاح.');
+            await loadCourse();
+          }}
+        />
+      )}
     </div>
   );
 }

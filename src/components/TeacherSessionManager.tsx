@@ -1,24 +1,5 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import {
-  Calendar,
-  Plus,
-  Users,
-  User,
-  CheckCircle2,
-  XCircle,
-  Edit3,
-  Clock,
-  AlertCircle,
-  Ban,
-  BookOpen,
-  Trash2,
-  MapPin,
-  Video,
-  Info,
-  ChevronRight,
-  ChevronLeft,
-} from 'lucide-react';
-import {
   apiFetch,
   SESSION_TYPE_LABELS_AR,
   SESSION_STATUS_LABELS_AR,
@@ -36,6 +17,9 @@ import {
   type CurriculumOverviewResponse,
   type CurriculumSubjectItem,
 } from '../lib/api';
+import { StateBanner } from './ui/StateBanner';
+import { EmptyState } from './ui/EmptyState';
+import { LoadingSkeleton } from './ui/LoadingSkeleton';
 
 interface TaxonomyOption {
   id: number;
@@ -142,7 +126,6 @@ export function TeacherSessionManager({
   const [feedback, setFeedback] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Teacher Assignment selector state
   const [assignSystemId, setAssignSystemId] = useState<number | ''>('');
   const [assignGradeId, setAssignGradeId] = useState<number | ''>('');
   const [assignDivisionId, setAssignDivisionId] = useState<number | ''>('');
@@ -158,24 +141,20 @@ export function TeacherSessionManager({
   const [assignOnline, setAssignOnline] = useState(true);
   const [assignInPerson, setAssignInPerson] = useState(false);
 
-  // Request Filters
   const [reqTypeFilter, setReqTypeFilter] = useState('');
   const [reqStatusFilter, setReqStatusFilter] = useState('');
   const [reqSubjectFilter, setReqSubjectFilter] = useState('');
   const [reqDateFilter, setReqDateFilter] = useState('');
 
-  // Confirmation modal for Accept / Reject booking requests
   const [pendingDecision, setPendingDecision] = useState<{
     request: TeacherRequestItem;
     decision: 'accept' | 'reject';
   } | null>(null);
   const [submittingDecision, setSubmittingDecision] = useState(false);
 
-  // Session Details modal
   const [viewingDetailsSession, setViewingDetailsSession] =
     useState<TeachingSessionItem | null>(null);
 
-  // Create / Edit session form state
   const [showForm, setShowForm] = useState(false);
   const [editingSessionId, setEditingSessionId] = useState<number | null>(null);
   const [sessionType, setSessionType] = useState<'ONE_TO_ONE' | 'GROUP'>(
@@ -210,14 +189,12 @@ export function TeacherSessionManager({
   const [registrationDeadline, setRegistrationDeadline] = useState('');
   const [savingSession, setSavingSession] = useState(false);
 
-  // Accepted students modal
   const [viewingStudentsSession, setViewingStudentsSession] =
     useState<TeachingSessionItem | null>(null);
   const [acceptedStudents, setAcceptedStudents] = useState<
     AcceptedStudentItem[]
   >([]);
 
-  // New availability rule input
   const [newDay, setNewDay] = useState(0);
   const [newAvailStart, setNewAvailStart] = useState('17:00');
   const [newAvailEnd, setNewAvailEnd] = useState('20:00');
@@ -293,7 +270,6 @@ export function TeacherSessionManager({
     setSessionPage(1);
   }, [sessionView, sessionSubjectFilter, sessionSearch]);
 
-  // Load candidate curriculum subjects when teacher picks System/Grade/Division/Pathway
   useEffect(() => {
     if (!currOverview || !assignSystemId || !assignGradeId) {
       setAssignCurrSubjOptions([]);
@@ -682,168 +658,155 @@ export function TeacherSessionManager({
 
   return (
     <section
-      className="bg-white border border-slate-200 rounded-xl p-6 space-y-6"
+      className="jusoor-card p-4 sm:p-6 space-y-5"
       data-testid="teacher-session-manager"
     >
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
-          <h2 className="font-display text-xl font-bold text-slate-900 flex items-center gap-2">
-            <Calendar className="w-5 h-5 text-teal-700" />
+          <h2 className="font-display text-lg sm:text-xl font-bold text-[#102A43] flex items-center gap-2 m-0">
+            <i className="bi bi-calendar2-check text-[#0F766E]" aria-hidden="true" />
             <span>إدارة الجلسات الفردية والجماعية وطلبات الحجز</span>
           </h2>
-          <p className="text-xs sm:text-sm text-slate-600 mt-1">
+          <p className="text-xs sm:text-sm text-[#64748B] mt-1 mb-0">
             استعرض الجلسات الأونلاين والأوفلاين، وأدر طلبات الجلسات الفردية والجماعية والمواد المرتبطة بالمنهج.
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={() => {
-              if (showForm && !editingSessionId) {
-                setShowForm(false);
-              } else {
-                resetForm();
-                setShowForm(true);
-              }
-            }}
-            className="px-4 py-2 bg-teal-700 hover:bg-teal-800 text-white text-xs sm:text-sm font-semibold rounded-lg flex items-center gap-1.5 cursor-pointer"
-          >
-            <Plus className="w-4 h-4" />
-            <span>{showForm ? 'إغلاق النموذج' : 'إنشاء جلسة جديدة'}</span>
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={() => {
+            if (showForm && !editingSessionId) {
+              setShowForm(false);
+            } else {
+              resetForm();
+              setShowForm(true);
+            }
+          }}
+          className="btn-jusoor-primary px-4 py-2 text-xs sm:text-sm inline-flex items-center gap-1.5 cursor-pointer self-start lg:self-auto"
+        >
+          <i className={`bi ${showForm ? 'bi-x-lg' : 'bi-plus-lg'}`} aria-hidden="true" />
+          <span>{showForm ? 'إغلاق النموذج' : 'إنشاء جلسة جديدة'}</span>
+        </button>
       </div>
 
-      {/* 9 Session & Request Sections + Assignments & Availability */}
-      <div className="space-y-2">
-        <div
-          className="flex flex-wrap items-center gap-2"
-          role="tablist"
-          aria-label="أقسام إدارة جلسات المعلم"
-        >
-          {[
-            {
-              key: 'all' as const,
-              label: `كل الجلسات (${counts.all})`,
-              active: activeTab === 'SESSIONS' && sessionView === 'all',
-              onClick: () => openSessionView('all'),
-            },
-            {
-              key: 'online_group' as const,
-              label: `الجلسات الجماعية أونلاين (${counts.onlineGroup})`,
-              active: activeTab === 'SESSIONS' && sessionView === 'online_group',
-              onClick: () => openSessionView('online_group'),
-            },
-            {
-              key: 'online_one_to_one' as const,
-              label: `الجلسات الفردية أونلاين (${counts.onlineOneToOne})`,
-              active:
-                activeTab === 'SESSIONS' && sessionView === 'online_one_to_one',
-              onClick: () => openSessionView('online_one_to_one'),
-            },
-            {
-              key: 'offline_group' as const,
-              label: `الجلسات الجماعية أوفلاين (${counts.offlineGroup})`,
-              active: activeTab === 'SESSIONS' && sessionView === 'offline_group',
-              onClick: () => openSessionView('offline_group'),
-            },
-            {
-              key: 'req_1on1' as const,
-              label: `طلبات الجلسات الفردية (${pendingIndividualRequestsCount})`,
-              active:
-                activeTab === 'REQUESTS' && reqTypeFilter === 'ONE_TO_ONE',
-              onClick: () => openRequestsView('ONE_TO_ONE'),
-            },
-            {
-              key: 'req_group' as const,
-              label: `طلبات الجلسات الجماعية (${pendingGroupRequestsCount})`,
-              active: activeTab === 'REQUESTS' && reqTypeFilter === 'GROUP',
-              onClick: () => openRequestsView('GROUP'),
-            },
-            {
-              key: 'upcoming' as const,
-              label: `الجلسات القادمة (${counts.upcoming})`,
-              active: activeTab === 'SESSIONS' && sessionView === 'upcoming',
-              onClick: () => openSessionView('upcoming'),
-            },
-            {
-              key: 'completed' as const,
-              label: `الجلسات المكتملة (${counts.completed})`,
-              active: activeTab === 'SESSIONS' && sessionView === 'completed',
-              onClick: () => openSessionView('completed'),
-            },
-            {
-              key: 'cancelled' as const,
-              label: `الجلسات الملغاة (${counts.cancelled})`,
-              active: activeTab === 'SESSIONS' && sessionView === 'cancelled',
-              onClick: () => openSessionView('cancelled'),
-            },
-            {
-              key: 'assignments' as const,
-              label: `موادي وصفوفي (${assignments.length})`,
-              active: activeTab === 'ASSIGNMENTS',
-              onClick: () => setActiveTab('ASSIGNMENTS'),
-            },
-            {
-              key: 'availability' as const,
-              label: `التفرغ الأسبوعي (${availability.length})`,
-              active: activeTab === 'AVAILABILITY',
-              onClick: () => setActiveTab('AVAILABILITY'),
-            },
-          ].map((btn) => (
-            <button
-              key={btn.key}
-              type="button"
-              onClick={btn.onClick}
-              data-testid={`teacher-tab-${btn.key}`}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-lg border transition-colors whitespace-nowrap cursor-pointer ${
-                btn.active
-                  ? 'bg-slate-900 text-white border-slate-900'
-                  : 'bg-slate-50 text-slate-700 border-slate-200 hover:border-slate-400'
-              }`}
-            >
-              {btn.label}
-            </button>
-          ))}
-        </div>
+      {/* Section Navigation Tabs */}
+      <div
+        className="flex flex-wrap items-center gap-2"
+        role="tablist"
+        aria-label="أقسام إدارة جلسات المعلم"
+      >
+        {[
+          {
+            key: 'all' as const,
+            label: `كل الجلسات (${counts.all})`,
+            active: activeTab === 'SESSIONS' && sessionView === 'all',
+            onClick: () => openSessionView('all'),
+          },
+          {
+            key: 'online_group' as const,
+            label: `الجماعية أونلاين (${counts.onlineGroup})`,
+            active: activeTab === 'SESSIONS' && sessionView === 'online_group',
+            onClick: () => openSessionView('online_group'),
+          },
+          {
+            key: 'online_one_to_one' as const,
+            label: `الفردية أونلاين (${counts.onlineOneToOne})`,
+            active:
+              activeTab === 'SESSIONS' && sessionView === 'online_one_to_one',
+            onClick: () => openSessionView('online_one_to_one'),
+          },
+          {
+            key: 'offline_group' as const,
+            label: `الجماعية أوفلاين (${counts.offlineGroup})`,
+            active: activeTab === 'SESSIONS' && sessionView === 'offline_group',
+            onClick: () => openSessionView('offline_group'),
+          },
+          {
+            key: 'req_1on1' as const,
+            label: `طلبات الفردية (${pendingIndividualRequestsCount})`,
+            active: activeTab === 'REQUESTS' && reqTypeFilter === 'ONE_TO_ONE',
+            onClick: () => openRequestsView('ONE_TO_ONE'),
+          },
+          {
+            key: 'req_group' as const,
+            label: `طلبات الجماعية (${pendingGroupRequestsCount})`,
+            active: activeTab === 'REQUESTS' && reqTypeFilter === 'GROUP',
+            onClick: () => openRequestsView('GROUP'),
+          },
+          {
+            key: 'upcoming' as const,
+            label: `القادمة (${counts.upcoming})`,
+            active: activeTab === 'SESSIONS' && sessionView === 'upcoming',
+            onClick: () => openSessionView('upcoming'),
+          },
+          {
+            key: 'completed' as const,
+            label: `المكتملة (${counts.completed})`,
+            active: activeTab === 'SESSIONS' && sessionView === 'completed',
+            onClick: () => openSessionView('completed'),
+          },
+          {
+            key: 'cancelled' as const,
+            label: `الملغاة (${counts.cancelled})`,
+            active: activeTab === 'SESSIONS' && sessionView === 'cancelled',
+            onClick: () => openSessionView('cancelled'),
+          },
+          {
+            key: 'assignments' as const,
+            label: `موادي وصفوفي (${assignments.length})`,
+            active: activeTab === 'ASSIGNMENTS',
+            onClick: () => setActiveTab('ASSIGNMENTS'),
+          },
+          {
+            key: 'availability' as const,
+            label: `التفرغ الأسبوعي (${availability.length})`,
+            active: activeTab === 'AVAILABILITY',
+            onClick: () => setActiveTab('AVAILABILITY'),
+          },
+        ].map((btn) => (
+          <button
+            key={btn.key}
+            type="button"
+            onClick={btn.onClick}
+            data-testid={`teacher-tab-${btn.key}`}
+            className={`px-3 py-1.5 text-xs font-semibold rounded-lg border transition-colors whitespace-nowrap cursor-pointer ${
+              btn.active
+                ? 'bg-[#102A43] text-white border-[#102A43]'
+                : 'bg-[#F5F8FC] text-[#172B4D] border-[#DCE5F0] hover:border-[#247BA0]'
+            }`}
+          >
+            {btn.label}
+          </button>
+        ))}
       </div>
 
       {feedback && (
-        <div className="p-3.5 rounded-lg bg-teal-50 border border-teal-200 text-xs sm:text-sm text-teal-900 flex items-center gap-2">
-          <CheckCircle2 className="w-4 h-4 text-teal-700 shrink-0" />
-          <span>{feedback}</span>
-        </div>
+        <StateBanner variant="success" message={feedback} onDismiss={() => setFeedback(null)} />
       )}
       {error && (
-        <div className="p-3.5 rounded-lg bg-red-50 border border-red-200 text-xs sm:text-sm text-red-800 flex items-center gap-2">
-          <AlertCircle className="w-4 h-4 shrink-0" />
-          <span>{error}</span>
-        </div>
+        <StateBanner variant="error" message={error} onDismiss={() => setError(null)} />
       )}
 
       {/* Create / Edit Session Form */}
       {showForm && (
         <form
           onSubmit={handleSaveSession}
-          className="border border-slate-200 bg-slate-50/70 rounded-xl p-5 space-y-4"
+          className="jusoor-subcard p-4 sm:p-5 space-y-4"
         >
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h3 className="font-display text-base font-bold text-slate-900">
+            <h3 className="font-display text-base font-bold text-[#102A43] m-0">
               {editingSessionId
                 ? 'تعديل بيانات الجلسة'
                 : 'نشر موعد فردي أو جلسة جماعية جديدة'}
             </h3>
-            <div className="flex items-center gap-2">
+            <div className="jusoor-tabs inline-flex items-center gap-1">
               {(['ONE_TO_ONE', 'GROUP'] as const).map((t) => (
                 <button
                   key={t}
                   type="button"
                   onClick={() => setSessionType(t)}
-                  className={`px-3 py-1.5 text-xs font-semibold rounded-lg border cursor-pointer ${
-                    sessionType === t
-                      ? 'bg-slate-900 text-white border-slate-900'
-                      : 'bg-white text-slate-700 border-slate-300'
+                  className={`jusoor-tab-btn px-3 py-1.5 text-xs cursor-pointer ${
+                    sessionType === t ? 'is-active' : ''
                   }`}
                 >
                   {SESSION_TYPE_LABELS_AR[t]}
@@ -852,9 +815,9 @@ export function TeacherSessionManager({
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            <div className="lg:col-span-2">
-              <label className="block text-xs font-medium text-slate-700 mb-1">
+          <div className="row g-3">
+            <div className="col-12 col-lg-8">
+              <label className="block text-xs font-semibold text-[#172B4D] mb-1">
                 عنوان الجلسة *
               </label>
               <input
@@ -867,48 +830,50 @@ export function TeacherSessionManager({
                     ? 'مثال: جلسة فردية أونلاين لمراجعة الوحدة الأولى'
                     : 'مثال: ورشة مراجعة جماعية شاملة'
                 }
-                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white"
+                className="jusoor-input w-full px-3 py-2 text-sm"
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">
-                  السعر *
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.5"
-                  required
-                  value={price}
-                  onChange={(e) => setPrice(e.target.value)}
-                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white font-mono-num"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">
-                  العملة
-                </label>
-                <select
-                  value={currency}
-                  onChange={(e) => setCurrency(e.target.value as 'EGP' | 'USD')}
-                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white"
-                >
-                  <option value="EGP">جنيه مصري (EGP)</option>
-                  <option value="USD">دولار (USD)</option>
-                </select>
+            <div className="col-12 col-lg-4">
+              <div className="row g-2">
+                <div className="col-6">
+                  <label className="block text-xs font-semibold text-[#172B4D] mb-1">
+                    السعر *
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.5"
+                    required
+                    value={price}
+                    onChange={(e) => setPrice(e.target.value)}
+                    className="jusoor-input w-full px-3 py-2 text-sm font-mono-num"
+                  />
+                </div>
+                <div className="col-6">
+                  <label className="block text-xs font-semibold text-[#172B4D] mb-1">
+                    العملة
+                  </label>
+                  <select
+                    value={currency}
+                    onChange={(e) => setCurrency(e.target.value as 'EGP' | 'USD')}
+                    className="jusoor-select w-full px-3 py-2 text-sm"
+                  >
+                    <option value="EGP">جنيه مصري (EGP)</option>
+                    <option value="USD">دولار (USD)</option>
+                  </select>
+                </div>
               </div>
             </div>
 
-            <div className="lg:col-span-3">
-              <label className="block text-xs font-medium text-slate-700 mb-1">
+            <div className="col-12">
+              <label className="block text-xs font-semibold text-[#172B4D] mb-1">
                 ربط بمادة من المراحل التعليمية المصرية (اختياري — يُظهر الجلسة في اكتشاف الطلاب)
               </label>
               <select
                 value={curriculumSubjectId}
                 onChange={(e) => setCurriculumSubjectId(e.target.value)}
-                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white"
+                className="jusoor-select w-full px-3 py-2 text-sm"
               >
                 <option value="">
                   بدون ربط بمنهج صف محدد (استخدم التخصص العام بالأسفل)
@@ -928,14 +893,14 @@ export function TeacherSessionManager({
 
             {!curriculumSubjectId && (
               <>
-                <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">
+                <div className="col-12 col-md-6 col-lg-4">
+                  <label className="block text-xs font-semibold text-[#172B4D] mb-1">
                     المادة / التخصص العام
                   </label>
                   <select
                     value={subjectId}
                     onChange={(e) => setSubjectId(e.target.value)}
-                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white"
+                    className="jusoor-select w-full px-3 py-2 text-sm"
                   >
                     <option value="">عام / بدون مادة محددة</option>
                     {subjects.map((subj) => (
@@ -946,14 +911,14 @@ export function TeacherSessionManager({
                   </select>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">
+                <div className="col-12 col-md-6 col-lg-4">
+                  <label className="block text-xs font-semibold text-[#172B4D] mb-1">
                     المرحلة الدراسية
                   </label>
                   <select
                     value={stageId}
                     onChange={(e) => setStageId(e.target.value)}
-                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white"
+                    className="jusoor-select w-full px-3 py-2 text-sm"
                   >
                     <option value="">كل المراحل</option>
                     {stages.map((stg) => (
@@ -966,8 +931,8 @@ export function TeacherSessionManager({
               </>
             )}
 
-            <div>
-              <label className="block text-xs font-medium text-slate-700 mb-1">
+            <div className="col-12 col-md-6 col-lg-4">
+              <label className="block text-xs font-semibold text-[#172B4D] mb-1">
                 طريقة التقديم *
               </label>
               <select
@@ -975,15 +940,15 @@ export function TeacherSessionManager({
                 onChange={(e) =>
                   setDeliveryMode(e.target.value as 'ONLINE' | 'IN_PERSON')
                 }
-                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white"
+                className="jusoor-select w-full px-3 py-2 text-sm"
               >
                 <option value="ONLINE">عن بُعد (أونلاين)</option>
                 <option value="IN_PERSON">حضوري (أوفلاين)</option>
               </select>
             </div>
 
-            <div>
-              <label className="block text-xs font-medium text-slate-700 mb-1">
+            <div className="col-12 col-md-6 col-lg-4">
+              <label className="block text-xs font-semibold text-[#172B4D] mb-1">
                 وقت البدء *
               </label>
               <input
@@ -991,12 +956,12 @@ export function TeacherSessionManager({
                 required
                 value={startTime}
                 onChange={(e) => setStartTime(e.target.value)}
-                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white font-mono-num"
+                className="jusoor-input w-full px-3 py-2 text-sm font-mono-num"
               />
             </div>
 
-            <div>
-              <label className="block text-xs font-medium text-slate-700 mb-1">
+            <div className="col-12 col-md-6 col-lg-4">
+              <label className="block text-xs font-semibold text-[#172B4D] mb-1">
                 وقت الانتهاء *
               </label>
               <input
@@ -1004,27 +969,27 @@ export function TeacherSessionManager({
                 required
                 value={endTime}
                 onChange={(e) => setEndTime(e.target.value)}
-                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white font-mono-num"
+                className="jusoor-input w-full px-3 py-2 text-sm font-mono-num"
               />
             </div>
 
-            <div>
-              <label className="block text-xs font-medium text-slate-700 mb-1">
+            <div className="col-12 col-md-6 col-lg-4">
+              <label className="block text-xs font-semibold text-[#172B4D] mb-1">
                 آخر موعد للتسجيل (اختياري)
               </label>
               <input
                 type="datetime-local"
                 value={registrationDeadline}
                 onChange={(e) => setRegistrationDeadline(e.target.value)}
-                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white font-mono-num"
+                className="jusoor-input w-full px-3 py-2 text-sm font-mono-num"
               />
             </div>
 
             {sessionType === 'GROUP' && (
               <>
-                <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">
-                    السعة القصوى للطلاب *
+                <div className="col-6 col-md-3">
+                  <label className="block text-xs font-semibold text-[#172B4D] mb-1">
+                    السعة القصوى *
                   </label>
                   <input
                     type="number"
@@ -1033,12 +998,12 @@ export function TeacherSessionManager({
                     required
                     value={capacity}
                     onChange={(e) => setCapacity(Number(e.target.value))}
-                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white font-mono-num"
+                    className="jusoor-input w-full px-3 py-2 text-sm font-mono-num"
                   />
                 </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">
-                    الحد الأدنى للطلاب (اختياري)
+                <div className="col-6 col-md-3">
+                  <label className="block text-xs font-semibold text-[#172B4D] mb-1">
+                    الحد الأدنى للطلاب
                   </label>
                   <input
                     type="number"
@@ -1046,15 +1011,15 @@ export function TeacherSessionManager({
                     max={capacity}
                     value={minStudents}
                     onChange={(e) => setMinStudents(e.target.value)}
-                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white font-mono-num"
+                    className="jusoor-input w-full px-3 py-2 text-sm font-mono-num"
                   />
                 </div>
               </>
             )}
 
             {deliveryMode === 'ONLINE' ? (
-              <div className={sessionType === 'GROUP' ? '' : 'lg:col-span-2'}>
-                <label className="block text-xs font-medium text-slate-700 mb-1">
+              <div className="col-12 col-lg-6">
+                <label className="block text-xs font-semibold text-[#172B4D] mb-1">
                   رابط الجلسة (يظهر للمقبولين فقط)
                 </label>
                 <input
@@ -1062,93 +1027,95 @@ export function TeacherSessionManager({
                   value={meetingUrl}
                   onChange={(e) => setMeetingUrl(e.target.value)}
                   placeholder="https://meet.example.com/..."
-                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white font-mono-num"
+                  className="jusoor-input w-full px-3 py-2 text-sm font-mono-num"
                 />
               </div>
             ) : (
-              <div className="md:col-span-2 lg:col-span-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 bg-white border border-slate-200 rounded-xl p-4">
-                <div className="sm:col-span-2 lg:col-span-3 text-xs font-bold text-slate-800">
-                  تفاصيل العنوان الحضوري (تظهر بوضوح للطلاب عند التصفح)
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">
-                    المحافظة *
-                  </label>
-                  <input
-                    type="text"
-                    required={!location.trim()}
-                    value={governorate}
-                    onChange={(e) => setGovernorate(e.target.value)}
-                    placeholder="مثال: القاهرة"
-                    className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg bg-white"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">
-                    المدينة *
-                  </label>
-                  <input
-                    type="text"
-                    required={!location.trim()}
-                    value={city}
-                    onChange={(e) => setCity(e.target.value)}
-                    placeholder="مثال: مدينة نصر"
-                    className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg bg-white"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">
-                    الحي / المنطقة
-                  </label>
-                  <input
-                    type="text"
-                    value={district}
-                    onChange={(e) => setDistrict(e.target.value)}
-                    placeholder="مثال: المنطقة السادسة"
-                    className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg bg-white"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">
-                    الشارع
-                  </label>
-                  <input
-                    type="text"
-                    value={streetName}
-                    onChange={(e) => setStreetName(e.target.value)}
-                    placeholder="مثال: 18 شارع عباس العقاد"
-                    className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg bg-white"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">
-                    اسم المبنى أو السنتر التعليمي
-                  </label>
-                  <input
-                    type="text"
-                    value={buildingOrCenterName}
-                    onChange={(e) => setBuildingOrCenterName(e.target.value)}
-                    placeholder="مثال: سنتر النخبة التعليمي"
-                    className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg bg-white"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">
-                    ملاحظات الوصول / القاعة
-                  </label>
-                  <input
-                    type="text"
-                    value={locationNotes}
-                    onChange={(e) => setLocationNotes(e.target.value)}
-                    placeholder="مثال: الدور الثالث - قاعة 4"
-                    className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg bg-white"
-                  />
+              <div className="col-12">
+                <div className="bg-white border border-[#DCE5F0] rounded-xl p-4 row g-3 m-0">
+                  <div className="col-12 text-xs font-bold text-[#102A43]">
+                    تفاصيل العنوان الحضوري (تظهر بوضوح للطلاب عند التصفح)
+                  </div>
+                  <div className="col-12 col-sm-6 col-lg-4">
+                    <label className="block text-xs font-semibold text-[#172B4D] mb-1">
+                      المحافظة *
+                    </label>
+                    <input
+                      type="text"
+                      required={!location.trim()}
+                      value={governorate}
+                      onChange={(e) => setGovernorate(e.target.value)}
+                      placeholder="مثال: القاهرة"
+                      className="jusoor-input w-full px-3 py-2 text-xs"
+                    />
+                  </div>
+                  <div className="col-12 col-sm-6 col-lg-4">
+                    <label className="block text-xs font-semibold text-[#172B4D] mb-1">
+                      المدينة *
+                    </label>
+                    <input
+                      type="text"
+                      required={!location.trim()}
+                      value={city}
+                      onChange={(e) => setCity(e.target.value)}
+                      placeholder="مثال: مدينة نصر"
+                      className="jusoor-input w-full px-3 py-2 text-xs"
+                    />
+                  </div>
+                  <div className="col-12 col-sm-6 col-lg-4">
+                    <label className="block text-xs font-semibold text-[#172B4D] mb-1">
+                      الحي / المنطقة
+                    </label>
+                    <input
+                      type="text"
+                      value={district}
+                      onChange={(e) => setDistrict(e.target.value)}
+                      placeholder="مثال: المنطقة السادسة"
+                      className="jusoor-input w-full px-3 py-2 text-xs"
+                    />
+                  </div>
+                  <div className="col-12 col-sm-6 col-lg-4">
+                    <label className="block text-xs font-semibold text-[#172B4D] mb-1">
+                      الشارع
+                    </label>
+                    <input
+                      type="text"
+                      value={streetName}
+                      onChange={(e) => setStreetName(e.target.value)}
+                      placeholder="مثال: 18 شارع عباس العقاد"
+                      className="jusoor-input w-full px-3 py-2 text-xs"
+                    />
+                  </div>
+                  <div className="col-12 col-sm-6 col-lg-4">
+                    <label className="block text-xs font-semibold text-[#172B4D] mb-1">
+                      اسم المبنى أو السنتر التعليمي
+                    </label>
+                    <input
+                      type="text"
+                      value={buildingOrCenterName}
+                      onChange={(e) => setBuildingOrCenterName(e.target.value)}
+                      placeholder="مثال: سنتر النخبة التعليمي"
+                      className="jusoor-input w-full px-3 py-2 text-xs"
+                    />
+                  </div>
+                  <div className="col-12 col-sm-6 col-lg-4">
+                    <label className="block text-xs font-semibold text-[#172B4D] mb-1">
+                      ملاحظات الوصول / القاعة
+                    </label>
+                    <input
+                      type="text"
+                      value={locationNotes}
+                      onChange={(e) => setLocationNotes(e.target.value)}
+                      placeholder="مثال: الدور الثالث - قاعة 4"
+                      className="jusoor-input w-full px-3 py-2 text-xs"
+                    />
+                  </div>
                 </div>
               </div>
             )}
 
-            <div className="md:col-span-2 lg:col-span-3">
-              <label className="block text-xs font-medium text-slate-700 mb-1">
+            <div className="col-12">
+              <label className="block text-xs font-semibold text-[#172B4D] mb-1">
                 وصف الجلسة وأهدافها
               </label>
               <textarea
@@ -1156,7 +1123,7 @@ export function TeacherSessionManager({
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="اشرح باختصار ما سيتعلمه الطالب في هذه الجلسة..."
-                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white"
+                className="jusoor-textarea w-full px-3 py-2 text-sm"
               />
             </div>
           </div>
@@ -1165,7 +1132,7 @@ export function TeacherSessionManager({
             <button
               type="submit"
               disabled={savingSession}
-              className="px-5 py-2.5 bg-teal-700 hover:bg-teal-800 disabled:opacity-60 text-white text-xs sm:text-sm font-semibold rounded-lg cursor-pointer"
+              className="btn-jusoor-primary px-5 py-2.5 text-xs sm:text-sm cursor-pointer"
             >
               {savingSession
                 ? 'جاري الحفظ...'
@@ -1179,7 +1146,7 @@ export function TeacherSessionManager({
                 setShowForm(false);
                 resetForm();
               }}
-              className="px-4 py-2.5 border border-slate-300 text-slate-700 text-xs sm:text-sm font-semibold rounded-lg bg-white cursor-pointer"
+              className="btn-jusoor-outline px-4 py-2.5 text-xs sm:text-sm cursor-pointer"
             >
               إلغاء
             </button>
@@ -1187,84 +1154,94 @@ export function TeacherSessionManager({
         </form>
       )}
 
-      {/* Tab 1: Teacher's Sessions (All 7 Session Views) */}
+      {/* Tab 1: Teacher's Sessions */}
       {activeTab === 'SESSIONS' && (
         <div className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-slate-50 p-3 rounded-xl border border-slate-200">
-            <input
-              type="text"
-              value={sessionSearch}
-              onChange={(e) => setSessionSearch(e.target.value)}
-              placeholder="ابحث بعنوان الجلسة، الصف، أو العنوان..."
-              aria-label="بحث في جلسات المعلم"
-              className="px-3 py-2 text-xs border border-slate-300 rounded-lg bg-white sm:col-span-2"
-            />
-            <select
-              value={sessionSubjectFilter}
-              onChange={(e) => setSessionSubjectFilter(e.target.value)}
-              aria-label="تصفية الجلسات بالمادة"
-              className="px-3 py-2 text-xs border border-slate-300 rounded-lg bg-white"
-            >
-              <option value="">كل المواد</option>
-              {subjects.map((subj) => (
-                <option key={subj.id} value={subj.id}>
-                  {subj.nameAr}
-                </option>
-              ))}
-            </select>
+          <div className="jusoor-subcard p-3 row g-2.5 m-0">
+            <div className="col-12 col-sm-8">
+              <input
+                type="text"
+                value={sessionSearch}
+                onChange={(e) => setSessionSearch(e.target.value)}
+                placeholder="ابحث بعنوان الجلسة، الصف، أو العنوان..."
+                aria-label="بحث في جلسات المعلم"
+                className="jusoor-input w-full px-3 py-2 text-xs"
+              />
+            </div>
+            <div className="col-12 col-sm-4">
+              <select
+                value={sessionSubjectFilter}
+                onChange={(e) => setSessionSubjectFilter(e.target.value)}
+                aria-label="تصفية الجلسات بالمادة"
+                className="jusoor-select w-full px-3 py-2 text-xs"
+              >
+                <option value="">كل المواد</option>
+                {subjects.map((subj) => (
+                  <option key={subj.id} value={subj.id}>
+                    {subj.nameAr}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
           {loading ? (
-            <div className="h-32 bg-slate-50 rounded-xl animate-pulse" />
+            <LoadingSkeleton variant="list" count={3} />
           ) : filteredLocalSessions.length === 0 ? (
-            <p className="text-sm text-slate-500 py-8 text-center">
-              لا توجد جلسات في هذا القسم حالياً.
-            </p>
+            <EmptyState
+              icon="bi-calendar2"
+              title="لا توجد جلسات في هذا القسم حالياً"
+              description="يمكنك إنشاء جلسة جديدة أو تبديل التبويب لعرض باقي الجلسات."
+            />
           ) : (
             <>
-              <div className="divide-y divide-slate-200 border border-slate-200 rounded-xl overflow-hidden">
+              <div className="divide-y divide-[#DCE5F0] border border-[#DCE5F0] rounded-xl overflow-hidden bg-white">
                 {pagedSessions.map((s) => {
                   const isOffline = isOfflineDeliveryMode(s.deliveryMode);
                   return (
                     <div
                       key={s.id}
                       data-testid={`teacher-session-row-${s.id}`}
-                      className="p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white"
+                      className="p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-4 hover:bg-[#F8FBFE] transition-colors"
                     >
                       <div className="space-y-1.5">
                         <div className="flex flex-wrap items-center gap-2 text-xs">
-                          <span className="font-semibold text-slate-900 flex items-center gap-1">
-                            {s.sessionType === 'ONE_TO_ONE' ? (
-                              <User className="w-3.5 h-3.5 text-slate-700" />
-                            ) : (
-                              <Users className="w-3.5 h-3.5 text-teal-700" />
-                            )}
+                          <span className="font-semibold text-[#102A43] inline-flex items-center gap-1">
+                            <i
+                              className={`bi ${
+                                s.sessionType === 'ONE_TO_ONE'
+                                  ? 'bi-person-video text-[#247BA0]'
+                                  : 'bi-people-fill text-[#0F766E]'
+                              }`}
+                              aria-hidden="true"
+                            />
                             {SESSION_TYPE_LABELS_AR[s.sessionType]}
                           </span>
                           <span aria-hidden="true">·</span>
-                          <span className="font-semibold text-teal-800">
+                          <span className="font-semibold text-[#0F766E]">
                             {SESSION_STATUS_LABELS_AR[s.status] || s.status}
                           </span>
                           <span aria-hidden="true">·</span>
-                          <span className="inline-flex items-center gap-1">
-                            {isOffline ? (
-                              <MapPin className="w-3.5 h-3.5 text-teal-700" />
-                            ) : (
-                              <Video className="w-3.5 h-3.5 text-teal-700" />
-                            )}
+                          <span className="inline-flex items-center gap-1 text-[#64748B]">
+                            <i
+                              className={`bi ${
+                                isOffline ? 'bi-geo-alt' : 'bi-camera-video'
+                              } text-[#0F766E]`}
+                              aria-hidden="true"
+                            />
                             {DELIVERY_MODE_LABELS_AR[s.deliveryMode]}
                           </span>
                           <span aria-hidden="true">·</span>
-                          <span className="font-mono-num font-bold text-slate-900">
+                          <span className="font-mono-num font-bold text-[#102A43]">
                             {formatCurrencyPrice(s.price, s.currency)}
                           </span>
                         </div>
 
-                        <div className="font-display text-sm sm:text-base font-bold text-slate-900">
+                        <div className="font-display text-sm sm:text-base font-bold text-[#102A43]">
                           {s.title}
                         </div>
                         {(s.subjectNameAr || s.gradeNameAr) && (
-                          <div className="text-xs text-teal-800 font-medium">
+                          <div className="text-xs text-[#247BA0] font-semibold">
                             {[
                               s.subjectNameAr,
                               s.gradeNameAr,
@@ -1276,8 +1253,8 @@ export function TeacherSessionManager({
                           </div>
                         )}
                         {isOffline && s.location && (
-                          <div className="text-xs text-slate-600 flex items-center gap-1">
-                            <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                          <div className="text-xs text-[#64748B] flex items-center gap-1">
+                            <i className="bi bi-geo-alt shrink-0" aria-hidden="true" />
                             <span>
                               {s.location}
                               {s.isDemoLocation &&
@@ -1288,7 +1265,7 @@ export function TeacherSessionManager({
                           </div>
                         )}
 
-                        <div className="text-xs text-slate-600 flex flex-wrap items-center gap-3 font-mono-num">
+                        <div className="text-xs text-[#64748B] flex flex-wrap items-center gap-3 font-mono-num">
                           <span>
                             {formatSessionDateRange(s.startTime, s.endTime)}
                           </span>
@@ -1297,7 +1274,7 @@ export function TeacherSessionManager({
                             {s.remainingSeats})
                           </span>
                           {(s.pendingCount ?? 0) > 0 && (
-                            <span className="text-amber-700 font-semibold font-sans">
+                            <span className="text-[#B45309] font-bold font-sans">
                               {s.pendingCount} طلب بانتظار المراجعة
                             </span>
                           )}
@@ -1308,15 +1285,15 @@ export function TeacherSessionManager({
                         <button
                           type="button"
                           onClick={() => setViewingDetailsSession(s)}
-                          className="px-3 py-1.5 border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-semibold rounded-lg flex items-center gap-1 cursor-pointer"
+                          className="btn-jusoor-outline px-3 py-1.5 text-xs inline-flex items-center gap-1 cursor-pointer"
                         >
-                          <Info className="w-3.5 h-3.5" />
+                          <i className="bi bi-info-circle" aria-hidden="true" />
                           <span>التفاصيل</span>
                         </button>
                         <button
                           type="button"
                           onClick={() => handleViewAcceptedStudents(s)}
-                          className="px-3 py-1.5 border border-slate-300 hover:bg-slate-50 text-slate-800 text-xs font-semibold rounded-lg cursor-pointer"
+                          className="btn-jusoor-outline px-3 py-1.5 text-xs cursor-pointer"
                         >
                           الطلاب المقبولون ({s.acceptedCount})
                         </button>
@@ -1327,9 +1304,9 @@ export function TeacherSessionManager({
                               <button
                                 type="button"
                                 onClick={() => openEditForm(s)}
-                                className="px-3 py-1.5 border border-slate-300 hover:bg-slate-50 text-slate-800 text-xs font-semibold rounded-lg flex items-center gap-1 cursor-pointer"
+                                className="btn-jusoor-outline px-3 py-1.5 text-xs inline-flex items-center gap-1 cursor-pointer"
                               >
-                                <Edit3 className="w-3.5 h-3.5" />
+                                <i className="bi bi-pencil-square" aria-hidden="true" />
                                 <span>تعديل</span>
                               </button>
                               <button
@@ -1337,7 +1314,7 @@ export function TeacherSessionManager({
                                 onClick={() =>
                                   handleSessionAction(s.id, 'complete')
                                 }
-                                className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-lg cursor-pointer"
+                                className="btn-jusoor-navy px-3 py-1.5 text-xs cursor-pointer"
                               >
                                 إتمام
                               </button>
@@ -1346,9 +1323,9 @@ export function TeacherSessionManager({
                                 onClick={() =>
                                   handleSessionAction(s.id, 'cancel')
                                 }
-                                className="px-3 py-1.5 border border-red-200 text-red-700 hover:bg-red-50 text-xs font-semibold rounded-lg flex items-center gap-1 cursor-pointer"
+                                className="px-3 py-1.5 border border-[#FECACA] text-[#991B1B] hover:bg-[#FEF2F2] text-xs font-semibold rounded-lg inline-flex items-center gap-1 cursor-pointer"
                               >
-                                <Ban className="w-3.5 h-3.5" />
+                                <i className="bi bi-slash-circle" aria-hidden="true" />
                                 <span>إلغاء</span>
                               </button>
                             </>
@@ -1360,7 +1337,7 @@ export function TeacherSessionManager({
               </div>
 
               {totalSessionPages > 1 && (
-                <div className="flex items-center justify-between text-xs text-slate-600 pt-1">
+                <div className="flex items-center justify-between text-xs text-[#64748B] pt-1">
                   <span className="tabular-nums">
                     صفحة {sessionPage} من {totalSessionPages} (إجمالي{' '}
                     {filteredLocalSessions.length} جلسة)
@@ -1370,9 +1347,9 @@ export function TeacherSessionManager({
                       type="button"
                       disabled={sessionPage <= 1}
                       onClick={() => setSessionPage((p) => Math.max(1, p - 1))}
-                      className="px-3 py-1.5 border border-slate-300 rounded-lg bg-white text-slate-700 font-semibold disabled:opacity-50 flex items-center gap-1 cursor-pointer"
+                      className="btn-jusoor-outline px-3 py-1.5 text-xs disabled:opacity-50 inline-flex items-center gap-1 cursor-pointer"
                     >
-                      <ChevronRight className="w-3.5 h-3.5" />
+                      <i className="bi bi-chevron-right" aria-hidden="true" />
                       <span>السابق</span>
                     </button>
                     <button
@@ -1381,10 +1358,10 @@ export function TeacherSessionManager({
                       onClick={() =>
                         setSessionPage((p) => Math.min(totalSessionPages, p + 1))
                       }
-                      className="px-3 py-1.5 border border-slate-300 rounded-lg bg-white text-slate-700 font-semibold disabled:opacity-50 flex items-center gap-1 cursor-pointer"
+                      className="btn-jusoor-outline px-3 py-1.5 text-xs disabled:opacity-50 inline-flex items-center gap-1 cursor-pointer"
                     >
                       <span>التالي</span>
-                      <ChevronLeft className="w-3.5 h-3.5" />
+                      <i className="bi bi-chevron-left" aria-hidden="true" />
                     </button>
                   </div>
                 </div>
@@ -1394,79 +1371,88 @@ export function TeacherSessionManager({
         </div>
       )}
 
-      {/* Tab 2: Incoming Booking / Enrollment Requests (Individual & Group) */}
+      {/* Tab 2: Incoming Requests */}
       {activeTab === 'REQUESTS' && (
         <div className="space-y-4" data-testid="teacher-requests-panel">
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 bg-slate-50 p-3 rounded-xl border border-slate-200">
-            <select
-              value={reqTypeFilter}
-              onChange={(e) => setReqTypeFilter(e.target.value)}
-              aria-label="تصفية بنوع الجلسة"
-              className="px-3 py-2 text-xs border border-slate-300 rounded-lg bg-white"
-            >
-              <option value="">كل أنواع الجلسات</option>
-              <option value="ONE_TO_ONE">طلبات الجلسات الفردية (1:1)</option>
-              <option value="GROUP">طلبات الجلسات الجماعية</option>
-            </select>
-            <select
-              value={reqStatusFilter}
-              onChange={(e) => setReqStatusFilter(e.target.value)}
-              aria-label="تصفية بحالة الطلب"
-              className="px-3 py-2 text-xs border border-slate-300 rounded-lg bg-white"
-            >
-              <option value="">كل الحالات</option>
-              <option value="PENDING">بانتظار الموافقة</option>
-              <option value="ACCEPTED">مقبول</option>
-              <option value="REJECTED">مرفوض</option>
-              <option value="CANCELLED">ملغى</option>
-            </select>
-            <select
-              value={reqSubjectFilter}
-              onChange={(e) => setReqSubjectFilter(e.target.value)}
-              aria-label="تصفية بالمادة"
-              className="px-3 py-2 text-xs border border-slate-300 rounded-lg bg-white"
-            >
-              <option value="">كل المواد</option>
-              {subjects.map((subj) => (
-                <option key={subj.id} value={subj.id}>
-                  {subj.nameAr}
-                </option>
-              ))}
-            </select>
-            <input
-              type="date"
-              value={reqDateFilter}
-              onChange={(e) => setReqDateFilter(e.target.value)}
-              aria-label="تصفية بالتاريخ"
-              className="px-3 py-2 text-xs border border-slate-300 rounded-lg bg-white font-mono-num"
-            />
+          <div className="jusoor-subcard p-3 row g-2.5 m-0">
+            <div className="col-12 col-sm-6 col-lg-3">
+              <select
+                value={reqTypeFilter}
+                onChange={(e) => setReqTypeFilter(e.target.value)}
+                aria-label="تصفية بنوع الجلسة"
+                className="jusoor-select w-full px-3 py-2 text-xs"
+              >
+                <option value="">كل أنواع الجلسات</option>
+                <option value="ONE_TO_ONE">طلبات الجلسات الفردية (1:1)</option>
+                <option value="GROUP">طلبات الجلسات الجماعية</option>
+              </select>
+            </div>
+            <div className="col-12 col-sm-6 col-lg-3">
+              <select
+                value={reqStatusFilter}
+                onChange={(e) => setReqStatusFilter(e.target.value)}
+                aria-label="تصفية بحالة الطلب"
+                className="jusoor-select w-full px-3 py-2 text-xs"
+              >
+                <option value="">كل الحالات</option>
+                <option value="PENDING">بانتظار الموافقة</option>
+                <option value="ACCEPTED">مقبول</option>
+                <option value="REJECTED">مرفوض</option>
+                <option value="CANCELLED">ملغى</option>
+              </select>
+            </div>
+            <div className="col-12 col-sm-6 col-lg-3">
+              <select
+                value={reqSubjectFilter}
+                onChange={(e) => setReqSubjectFilter(e.target.value)}
+                aria-label="تصفية بالمادة"
+                className="jusoor-select w-full px-3 py-2 text-xs"
+              >
+                <option value="">كل المواد</option>
+                {subjects.map((subj) => (
+                  <option key={subj.id} value={subj.id}>
+                    {subj.nameAr}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="col-12 col-sm-6 col-lg-3">
+              <input
+                type="date"
+                value={reqDateFilter}
+                onChange={(e) => setReqDateFilter(e.target.value)}
+                aria-label="تصفية بالتاريخ"
+                className="jusoor-input w-full px-3 py-2 text-xs font-mono-num"
+              />
+            </div>
           </div>
 
           {requests.length === 0 ? (
-            <p className="text-sm text-slate-500 py-8 text-center">
-              لا توجد طلبات مطابقة لخيارات البحث الحالية.
-            </p>
+            <EmptyState
+              icon="bi-inbox"
+              title="لا توجد طلبات مطابقة لخيارات البحث الحالية"
+            />
           ) : (
-            <div className="divide-y divide-slate-200 border border-slate-200 rounded-xl overflow-hidden">
+            <div className="divide-y divide-[#DCE5F0] border border-[#DCE5F0] rounded-xl overflow-hidden bg-white">
               {requests.map((r) => (
                 <div
                   key={r.id}
                   data-testid={`teacher-request-row-${r.id}`}
-                  className="p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white"
+                  className="p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-4"
                 >
                   <div className="space-y-1.5">
                     <div className="flex flex-wrap items-center gap-2 text-xs">
-                      <span className="font-semibold text-slate-900">
+                      <span className="font-semibold text-[#102A43]">
                         {SESSION_TYPE_LABELS_AR[r.sessionType]}
                       </span>
                       <span aria-hidden="true">·</span>
                       <span
                         className={
                           r.status === 'ACCEPTED'
-                            ? 'text-emerald-700 font-semibold'
+                            ? 'text-[#0F766E] font-bold'
                             : r.status === 'PENDING'
-                            ? 'text-amber-700 font-semibold'
-                            : 'text-slate-500 font-semibold'
+                            ? 'text-[#B45309] font-bold'
+                            : 'text-[#64748B] font-semibold'
                         }
                       >
                         {ENROLLMENT_STATUS_LABELS_AR[r.status] || r.status}
@@ -1474,7 +1460,7 @@ export function TeacherSessionManager({
                       {(r.subjectNameAr || r.gradeNameAr) && (
                         <>
                           <span aria-hidden="true">·</span>
-                          <span className="text-teal-800 font-medium">
+                          <span className="text-[#247BA0] font-semibold">
                             {[r.subjectNameAr, r.gradeNameAr, r.systemNameAr]
                               .filter(Boolean)
                               .join(' · ')}
@@ -1484,7 +1470,7 @@ export function TeacherSessionManager({
                       {r.price !== undefined && (
                         <>
                           <span aria-hidden="true">·</span>
-                          <span className="font-mono-num font-bold text-slate-900">
+                          <span className="font-mono-num font-bold text-[#102A43]">
                             {formatCurrencyPrice(
                               r.price,
                               r.currency || 'EGP'
@@ -1494,47 +1480,47 @@ export function TeacherSessionManager({
                       )}
                     </div>
 
-                    <div className="text-sm font-bold text-slate-900">
+                    <div className="text-sm font-bold text-[#102A43]">
                       الطالب: {r.student.fullName}
                       {r.student.stageNameAr && (
-                        <span className="text-xs font-normal text-slate-500 mr-2">
+                        <span className="text-xs font-normal text-[#64748B] mr-2">
                           ({r.student.stageNameAr})
                         </span>
                       )}
                     </div>
 
-                    <div className="text-xs text-slate-700 flex flex-wrap items-center gap-2">
+                    <div className="text-xs text-[#172B4D] flex flex-wrap items-center gap-2">
                       <span>
-                        الجلسة: <strong className="font-medium">{r.sessionTitle}</strong>
+                        الجلسة: <strong className="font-semibold">{r.sessionTitle}</strong>
                       </span>
                       <span aria-hidden="true">·</span>
-                      <span className="font-mono-num text-slate-500">
+                      <span className="font-mono-num text-[#64748B]">
                         {formatSessionDateRange(
                           r.sessionStartTime,
                           r.sessionEndTime
                         )}
                       </span>
                       {r.durationMinutes && (
-                        <span className="text-slate-400">
+                        <span className="text-[#64748B]">
                           ({r.durationMinutes} د)
                         </span>
                       )}
                     </div>
 
                     {isOfflineDeliveryMode(r.deliveryMode) && r.location && (
-                      <div className="text-xs text-slate-600 flex items-center gap-1">
-                        <MapPin className="w-3.5 h-3.5 text-teal-700 shrink-0" />
+                      <div className="text-xs text-[#64748B] flex items-center gap-1">
+                        <i className="bi bi-geo-alt text-[#0F766E] shrink-0" aria-hidden="true" />
                         <span>{r.location}</span>
                       </div>
                     )}
 
                     {r.student.learningGoal && (
-                      <p className="text-xs text-slate-600">
+                      <p className="text-xs text-[#64748B] m-0">
                         هدف الطالب: {r.student.learningGoal}
                       </p>
                     )}
                     {r.notes && (
-                      <p className="text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5">
+                      <p className="text-xs text-[#172B4D] jusoor-subcard px-2.5 py-1.5 m-0">
                         رسالة الطالب: {r.notes}
                       </p>
                     )}
@@ -1548,9 +1534,9 @@ export function TeacherSessionManager({
                         onClick={() =>
                           setPendingDecision({ request: r, decision: 'accept' })
                         }
-                        className="px-3.5 py-2 bg-teal-700 hover:bg-teal-800 text-white text-xs font-semibold rounded-lg flex items-center gap-1 cursor-pointer"
+                        className="btn-jusoor-primary px-3.5 py-2 text-xs inline-flex items-center gap-1 cursor-pointer"
                       >
-                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        <i className="bi bi-check-circle" aria-hidden="true" />
                         <span>قبول</span>
                       </button>
                     )}
@@ -1561,9 +1547,9 @@ export function TeacherSessionManager({
                         onClick={() =>
                           setPendingDecision({ request: r, decision: 'reject' })
                         }
-                        className="px-3.5 py-2 border border-red-200 text-red-700 hover:bg-red-50 text-xs font-semibold rounded-lg flex items-center gap-1 cursor-pointer"
+                        className="px-3.5 py-2 border border-[#FECACA] text-[#991B1B] hover:bg-[#FEF2F2] text-xs font-semibold rounded-lg inline-flex items-center gap-1 cursor-pointer"
                       >
-                        <XCircle className="w-3.5 h-3.5" />
+                        <i className="bi bi-x-circle" aria-hidden="true" />
                         <span>
                           {r.status === 'ACCEPTED' ? 'إلغاء القبول' : 'رفض'}
                         </span>
@@ -1582,16 +1568,16 @@ export function TeacherSessionManager({
         <div className="space-y-4">
           <form
             onSubmit={handleAddAvailabilityRule}
-            className="grid grid-cols-1 sm:grid-cols-4 gap-3 items-end bg-slate-50 border border-slate-200 rounded-xl p-4"
+            className="jusoor-subcard p-4 row g-3 align-items-end m-0"
           >
-            <div>
-              <label className="block text-xs font-medium text-slate-700 mb-1">
+            <div className="col-12 col-sm-3">
+              <label className="block text-xs font-semibold text-[#172B4D] mb-1">
                 اليوم
               </label>
               <select
                 value={newDay}
                 onChange={(e) => setNewDay(Number(e.target.value))}
-                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white"
+                className="jusoor-select w-full px-3 py-2 text-sm"
               >
                 {Object.entries(WEEKDAY_LABELS_AR).map(([dayIdx, label]) => (
                   <option key={dayIdx} value={dayIdx}>
@@ -1600,8 +1586,8 @@ export function TeacherSessionManager({
                 ))}
               </select>
             </div>
-            <div>
-              <label className="block text-xs font-medium text-slate-700 mb-1">
+            <div className="col-6 col-sm-3">
+              <label className="block text-xs font-semibold text-[#172B4D] mb-1">
                 من الساعة
               </label>
               <input
@@ -1609,11 +1595,11 @@ export function TeacherSessionManager({
                 required
                 value={newAvailStart}
                 onChange={(e) => setNewAvailStart(e.target.value)}
-                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white font-mono-num"
+                className="jusoor-input w-full px-3 py-2 text-sm font-mono-num"
               />
             </div>
-            <div>
-              <label className="block text-xs font-medium text-slate-700 mb-1">
+            <div className="col-6 col-sm-3">
+              <label className="block text-xs font-semibold text-[#172B4D] mb-1">
                 إلى الساعة
               </label>
               <input
@@ -1621,28 +1607,31 @@ export function TeacherSessionManager({
                 required
                 value={newAvailEnd}
                 onChange={(e) => setNewAvailEnd(e.target.value)}
-                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white font-mono-num"
+                className="jusoor-input w-full px-3 py-2 text-sm font-mono-num"
               />
             </div>
-            <button
-              type="submit"
-              className="py-2 px-4 bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold rounded-lg flex items-center justify-center gap-1.5 cursor-pointer"
-            >
-              <Clock className="w-4 h-4" />
-              <span>إضافة فترة</span>
-            </button>
+            <div className="col-12 col-sm-3">
+              <button
+                type="submit"
+                className="btn-jusoor-navy w-full py-2 px-4 text-sm inline-flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <i className="bi bi-clock" aria-hidden="true" />
+                <span>إضافة فترة</span>
+              </button>
+            </div>
           </form>
 
           {availability.length === 0 ? (
-            <p className="text-xs text-slate-500">
-              لم تضف أوقات تفرغ أسبوعية ثابتة بعد.
-            </p>
+            <EmptyState
+              icon="bi-clock-history"
+              title="لم تضف أوقات تفرغ أسبوعية ثابتة بعد"
+            />
           ) : (
             <div className="flex flex-wrap gap-2">
               {availability.map((rule, idx) => (
                 <div
                   key={`${rule.dayOfWeek}-${rule.startTime}-${idx}`}
-                  className="px-3 py-2 bg-teal-50 border border-teal-200 rounded-lg text-xs text-teal-900 flex items-center gap-3"
+                  className="px-3 py-2 bg-[#E8F8F5] border border-[#99E2D8] rounded-lg text-xs text-[#0B4F4A] flex items-center gap-3"
                 >
                   <span className="font-semibold">
                     {WEEKDAY_LABELS_AR[rule.dayOfWeek]}
@@ -1653,7 +1642,7 @@ export function TeacherSessionManager({
                   <button
                     type="button"
                     onClick={() => handleRemoveAvailabilityRule(idx)}
-                    className="text-red-700 hover:text-red-900 font-bold cursor-pointer"
+                    className="text-[#DC2626] hover:text-[#991B1B] font-bold cursor-pointer"
                     aria-label="حذف فترة التفرغ"
                   >
                     ×
@@ -1665,22 +1654,22 @@ export function TeacherSessionManager({
         </div>
       )}
 
-      {/* Tab 4: Teacher Curriculum Teaching Assignments */}
+      {/* Tab 4: Curriculum Teaching Assignments */}
       {activeTab === 'ASSIGNMENTS' && (
-        <div className="space-y-5" data-testid="teacher-assignments-panel">
+        <div className="space-y-4" data-testid="teacher-assignments-panel">
           {currOverview && (
             <form
               onSubmit={handleAddTeachingAssignment}
-              className="bg-slate-50 border border-slate-200 rounded-xl p-5 space-y-4"
+              className="jusoor-subcard p-4 sm:p-5 space-y-4"
             >
-              <div className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                <BookOpen className="w-4 h-4 text-teal-700" />
+              <div className="text-sm font-bold text-[#102A43] flex items-center gap-2">
+                <i className="bi bi-book text-[#0F766E]" aria-hidden="true" />
                 <span>إضافة مادة وصف دراسي للتدريس</span>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">
+              <div className="row g-3">
+                <div className="col-12 col-sm-6 col-lg-3">
+                  <label className="block text-xs font-semibold text-[#172B4D] mb-1">
                     النظام التعليمي *
                   </label>
                   <select
@@ -1693,7 +1682,7 @@ export function TeacherSessionManager({
                       setAssignPathwayId('');
                       setAssignCurriculumSubjectId('');
                     }}
-                    className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg bg-white"
+                    className="jusoor-select w-full px-3 py-2 text-xs"
                   >
                     <option value="">اختر النظام...</option>
                     {currOverview.systems.map((sys) => (
@@ -1704,8 +1693,8 @@ export function TeacherSessionManager({
                   </select>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">
+                <div className="col-12 col-sm-6 col-lg-3">
+                  <label className="block text-xs font-semibold text-[#172B4D] mb-1">
                     الصف الدراسي *
                   </label>
                   <select
@@ -1719,7 +1708,7 @@ export function TeacherSessionManager({
                       setAssignCurriculumSubjectId('');
                     }}
                     disabled={!assignSystemId}
-                    className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg bg-white disabled:opacity-60"
+                    className="jusoor-select w-full px-3 py-2 text-xs disabled:opacity-60"
                   >
                     <option value="">اختر الصف...</option>
                     {currOverview.grades
@@ -1738,8 +1727,8 @@ export function TeacherSessionManager({
                     ?.code === 'GENERAL_SECONDARY' &&
                   (currOverview.grades.find((g) => g.id === assignGradeId)
                     ?.gradeNumber ?? 0) >= 2 && (
-                    <div>
-                      <label className="block text-xs font-medium text-slate-700 mb-1">
+                    <div className="col-12 col-sm-6 col-lg-3">
+                      <label className="block text-xs font-semibold text-[#172B4D] mb-1">
                         الشعبة (ثانوية عامة) *
                       </label>
                       <select
@@ -1749,7 +1738,7 @@ export function TeacherSessionManager({
                             e.target.value ? Number(e.target.value) : ''
                           )
                         }
-                        className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg bg-white"
+                        className="jusoor-select w-full px-3 py-2 text-xs"
                       >
                         <option value="">اختر الشعبة...</option>
                         {currOverview.divisions
@@ -1769,8 +1758,8 @@ export function TeacherSessionManager({
                     ?.code === 'EGYPTIAN_BACCALAUREATE' &&
                   (currOverview.grades.find((g) => g.id === assignGradeId)
                     ?.gradeNumber ?? 0) >= 2 && (
-                    <div>
-                      <label className="block text-xs font-medium text-slate-700 mb-1">
+                    <div className="col-12 col-sm-6 col-lg-3">
+                      <label className="block text-xs font-semibold text-[#172B4D] mb-1">
                         المسار (بكالوريا مصرية) *
                       </label>
                       <select
@@ -1780,7 +1769,7 @@ export function TeacherSessionManager({
                             e.target.value ? Number(e.target.value) : ''
                           )
                         }
-                        className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg bg-white"
+                        className="jusoor-select w-full px-3 py-2 text-xs"
                       >
                         <option value="">اختر المسار...</option>
                         {currOverview.pathways
@@ -1794,8 +1783,8 @@ export function TeacherSessionManager({
                     </div>
                   )}
 
-                <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">
+                <div className="col-12 col-sm-6 col-lg-3">
+                  <label className="block text-xs font-semibold text-[#172B4D] mb-1">
                     المادة المقررة *
                   </label>
                   <select
@@ -1806,7 +1795,7 @@ export function TeacherSessionManager({
                       )
                     }
                     disabled={assignCurrSubjOptions.length === 0}
-                    className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg bg-white disabled:opacity-60"
+                    className="jusoor-select w-full px-3 py-2 text-xs disabled:opacity-60"
                   >
                     <option value="">اختر المادة...</option>
                     {assignCurrSubjOptions.map((cs) => (
@@ -1817,8 +1806,8 @@ export function TeacherSessionManager({
                   </select>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">
+                <div className="col-12 col-sm-6 col-lg-3">
+                  <label className="block text-xs font-semibold text-[#172B4D] mb-1">
                     سعر الحصة (ج.م)
                   </label>
                   <input
@@ -1827,11 +1816,11 @@ export function TeacherSessionManager({
                     step="1"
                     value={assignHourlyRate}
                     onChange={(e) => setAssignHourlyRate(e.target.value)}
-                    className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg bg-white font-mono-num"
+                    className="jusoor-input w-full px-3 py-2 text-xs font-mono-num"
                   />
                 </div>
 
-                <div className="flex flex-wrap items-center gap-3 pt-5 text-xs">
+                <div className="col-12 col-sm-6 col-lg-3 flex flex-wrap items-center gap-3 pt-sm-4 text-xs">
                   <label className="flex items-center gap-1.5 cursor-pointer">
                     <input
                       type="checkbox"
@@ -1850,8 +1839,8 @@ export function TeacherSessionManager({
                   </label>
                 </div>
 
-                <div className="sm:col-span-2 flex flex-wrap items-center gap-3 pt-5 text-xs">
-                  <span className="text-slate-600 font-medium">
+                <div className="col-12 col-lg-6 flex flex-wrap items-center gap-3 pt-lg-4 text-xs">
+                  <span className="text-[#64748B] font-semibold">
                     لغات الشرح:
                   </span>
                   {(['ar', 'en', 'fr'] as const).map((lang) => (
@@ -1883,7 +1872,7 @@ export function TeacherSessionManager({
               <button
                 type="submit"
                 disabled={!assignCurriculumSubjectId}
-                className="px-4 py-2 bg-teal-700 hover:bg-teal-800 disabled:opacity-50 text-white text-xs font-semibold rounded-lg cursor-pointer"
+                className="btn-jusoor-primary px-4 py-2 text-xs cursor-pointer"
               >
                 حفظ المادة ضمن تخصصي التدريسي
               </button>
@@ -1891,26 +1880,27 @@ export function TeacherSessionManager({
           )}
 
           {assignments.length === 0 ? (
-            <p className="text-sm text-slate-500 text-center py-6">
-              لم تقم بإضافة مواد من المناهج المصرية بعد.
-            </p>
+            <EmptyState
+              icon="bi-journal-bookmark"
+              title="لم تقم بإضافة مواد من المناهج المصرية بعد"
+            />
           ) : (
-            <div className="divide-y divide-slate-200 border border-slate-200 rounded-xl overflow-hidden">
+            <div className="divide-y divide-[#DCE5F0] border border-[#DCE5F0] rounded-xl overflow-hidden bg-white">
               {assignments.map((a) => (
                 <div
                   key={a.id}
-                  className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white"
+                  className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
                 >
                   <div className="space-y-1">
-                    <div className="text-sm font-bold text-slate-900">
+                    <div className="text-sm font-bold text-[#102A43]">
                       {a.subjectNameAr}
                     </div>
-                    <div className="text-xs text-teal-800 font-medium">
+                    <div className="text-xs text-[#247BA0] font-semibold">
                       {a.systemNameAr} · {a.gradeNameAr}
                       {a.divisionNameAr ? ` · ${a.divisionNameAr}` : ''}
                       {a.pathwayNameAr ? ` · ${a.pathwayNameAr}` : ''}
                     </div>
-                    <div className="text-[11px] text-slate-500">
+                    <div className="text-[11px] text-[#64748B]">
                       لغات الشرح:{' '}
                       {(a.languagesOffered || [])
                         .map((l) => LANGUAGE_OF_INSTRUCTION_LABELS[l]?.ar || l)
@@ -1928,9 +1918,9 @@ export function TeacherSessionManager({
                   <button
                     type="button"
                     onClick={() => handleDeleteTeachingAssignment(a.id)}
-                    className="px-3 py-1.5 border border-red-200 text-red-700 hover:bg-red-50 text-xs font-semibold rounded-lg flex items-center gap-1 cursor-pointer self-start sm:self-center"
+                    className="px-3 py-1.5 border border-[#FECACA] text-[#991B1B] hover:bg-[#FEF2F2] text-xs font-semibold rounded-lg inline-flex items-center gap-1 cursor-pointer self-start sm:self-center"
                   >
-                    <Trash2 className="w-3.5 h-3.5" />
+                    <i className="bi bi-trash3" aria-hidden="true" />
                     <span>إزالة</span>
                   </button>
                 </div>
@@ -1940,16 +1930,16 @@ export function TeacherSessionManager({
         </div>
       )}
 
-      {/* Confirmation Modal Before Accepting or Rejecting Request */}
+      {/* Confirmation Modal */}
       {pendingDecision && (
         <div
-          className="fixed inset-0 z-50 bg-slate-900/50 flex items-center justify-center p-4"
+          className="fixed inset-0 z-50 bg-[#102A43]/60 backdrop-blur-xs flex items-center justify-center p-4"
           role="dialog"
           aria-modal="true"
           data-testid="teacher-decision-confirm-modal"
         >
-          <div className="bg-white border border-slate-200 rounded-xl w-full max-w-md p-6 space-y-4">
-            <h3 className="font-display text-lg font-bold text-slate-900">
+          <div className="jusoor-card w-full max-w-md p-5 sm:p-6 space-y-4">
+            <h3 className="font-display text-lg font-bold text-[#102A43] m-0">
               {pendingDecision.decision === 'accept'
                 ? 'تأكيد قبول طلب الحجز'
                 : pendingDecision.request.status === 'ACCEPTED'
@@ -1957,24 +1947,24 @@ export function TeacherSessionManager({
                 : 'تأكيد رفض طلب الحجز'}
             </h3>
 
-            <dl className="bg-slate-50 border border-slate-200 rounded-lg p-3.5 text-xs space-y-1.5 text-slate-700">
+            <dl className="jusoor-subcard p-3.5 text-xs space-y-1.5 text-[#172B4D] m-0">
               <div>
-                <span className="text-slate-500">الطالب: </span>
-                <strong className="text-slate-900">
+                <span className="text-[#64748B]">الطالب: </span>
+                <strong className="text-[#102A43]">
                   {pendingDecision.request.student.fullName}
                 </strong>
               </div>
               <div>
-                <span className="text-slate-500">الجلسة: </span>
-                <strong className="text-slate-900">
+                <span className="text-[#64748B]">الجلسة: </span>
+                <strong className="text-[#102A43]">
                   {pendingDecision.request.sessionTitle}
                 </strong>
               </div>
               {(pendingDecision.request.subjectNameAr ||
                 pendingDecision.request.gradeNameAr) && (
                 <div>
-                  <span className="text-slate-500">المادة والصف: </span>
-                  <span className="text-teal-800 font-semibold">
+                  <span className="text-[#64748B]">المادة والصف: </span>
+                  <span className="text-[#0F766E] font-semibold">
                     {[
                       pendingDecision.request.subjectNameAr,
                       pendingDecision.request.gradeNameAr,
@@ -1985,14 +1975,14 @@ export function TeacherSessionManager({
                 </div>
               )}
               <div className="font-mono-num">
-                <span className="text-slate-500 font-sans">الموعد: </span>
+                <span className="text-[#64748B] font-sans">الموعد: </span>
                 {formatSessionDateRange(
                   pendingDecision.request.sessionStartTime,
                   pendingDecision.request.sessionEndTime
                 )}
               </div>
               {pendingDecision.request.price !== undefined && (
-                <div className="font-mono-num font-bold text-teal-800">
+                <div className="font-mono-num font-bold text-[#0F766E]">
                   {formatCurrencyPrice(
                     pendingDecision.request.price,
                     pendingDecision.request.currency || 'EGP'
@@ -2001,7 +1991,7 @@ export function TeacherSessionManager({
               )}
             </dl>
 
-            <p className="text-xs text-slate-600 leading-relaxed">
+            <p className="text-xs text-[#64748B] leading-relaxed m-0">
               {pendingDecision.decision === 'accept'
                 ? pendingDecision.request.sessionType === 'ONE_TO_ONE'
                   ? 'سيتم حجز هذا الموعد الفردي للطالب وإغلاقه أمام الطلبات الأخرى وإشعار الطالب فوراً.'
@@ -2017,8 +2007,8 @@ export function TeacherSessionManager({
                 onClick={confirmAndExecuteRequestDecision}
                 className={`flex-1 py-2.5 text-white text-xs sm:text-sm font-semibold rounded-lg cursor-pointer disabled:opacity-60 ${
                   pendingDecision.decision === 'accept'
-                    ? 'bg-teal-700 hover:bg-teal-800'
-                    : 'bg-red-700 hover:bg-red-800'
+                    ? 'bg-[#0F766E] hover:bg-[#0B5D56]'
+                    : 'bg-[#DC2626] hover:bg-[#B91C1C]'
                 }`}
               >
                 {submittingDecision
@@ -2031,7 +2021,7 @@ export function TeacherSessionManager({
                 type="button"
                 disabled={submittingDecision}
                 onClick={() => setPendingDecision(null)}
-                className="px-4 py-2.5 border border-slate-300 text-slate-700 text-xs sm:text-sm font-semibold rounded-lg cursor-pointer"
+                className="btn-jusoor-outline px-4 py-2.5 text-xs sm:text-sm cursor-pointer"
               >
                 تراجع
               </button>
@@ -2043,43 +2033,43 @@ export function TeacherSessionManager({
       {/* Session Details Modal */}
       {viewingDetailsSession && (
         <div
-          className="fixed inset-0 z-50 bg-slate-900/50 flex items-center justify-center p-4"
+          className="fixed inset-0 z-50 bg-[#102A43]/60 backdrop-blur-xs flex items-center justify-center p-4"
           role="dialog"
           aria-modal="true"
         >
-          <div className="bg-white border border-slate-200 rounded-xl w-full max-w-lg p-6 space-y-4">
+          <div className="jusoor-card w-full max-w-lg p-5 sm:p-6 space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="font-display text-lg font-bold text-slate-900">
+              <h3 className="font-display text-lg font-bold text-[#102A43] m-0">
                 {viewingDetailsSession.title}
               </h3>
               <button
                 type="button"
                 onClick={() => setViewingDetailsSession(null)}
-                className="text-xs font-semibold text-slate-600 hover:text-slate-900 cursor-pointer"
+                className="text-xs font-semibold text-[#64748B] hover:text-[#102A43] cursor-pointer"
               >
                 إغلاق
               </button>
             </div>
-            <dl className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-slate-50 border border-slate-200 rounded-lg p-4 text-xs">
-              <div>
-                <dt className="text-slate-500">النوع والحالة</dt>
-                <dd className="font-semibold text-slate-900 mt-0.5">
+            <dl className="jusoor-subcard p-4 row g-3 text-xs m-0">
+              <div className="col-12 col-sm-6">
+                <dt className="text-[#64748B]">النوع والحالة</dt>
+                <dd className="font-semibold text-[#102A43] mt-0.5 mb-0">
                   {SESSION_TYPE_LABELS_AR[viewingDetailsSession.sessionType]} ·{' '}
                   {SESSION_STATUS_LABELS_AR[viewingDetailsSession.status]}
                 </dd>
               </div>
-              <div>
-                <dt className="text-slate-500">السعر</dt>
-                <dd className="font-mono-num font-bold text-teal-800 mt-0.5">
+              <div className="col-12 col-sm-6">
+                <dt className="text-[#64748B]">السعر</dt>
+                <dd className="font-mono-num font-bold text-[#0F766E] mt-0.5 mb-0">
                   {formatCurrencyPrice(
                     viewingDetailsSession.price,
                     viewingDetailsSession.currency
                   )}
                 </dd>
               </div>
-              <div className="sm:col-span-2">
-                <dt className="text-slate-500">التاريخ والوقت</dt>
-                <dd className="font-mono-num font-semibold text-slate-900 mt-0.5">
+              <div className="col-12">
+                <dt className="text-[#64748B]">التاريخ والوقت</dt>
+                <dd className="font-mono-num font-semibold text-[#102A43] mt-0.5 mb-0">
                   {formatSessionDateRange(
                     viewingDetailsSession.startTime,
                     viewingDetailsSession.endTime
@@ -2089,24 +2079,24 @@ export function TeacherSessionManager({
               </div>
               {isOfflineDeliveryMode(viewingDetailsSession.deliveryMode) &&
                 viewingDetailsSession.location && (
-                  <div className="sm:col-span-2">
-                    <dt className="text-slate-500">العنوان الحضوري الكامل</dt>
-                    <dd className="font-semibold text-slate-900 mt-0.5">
+                  <div className="col-12">
+                    <dt className="text-[#64748B]">العنوان الحضوري الكامل</dt>
+                    <dd className="font-semibold text-[#102A43] mt-0.5 mb-0">
                       {viewingDetailsSession.location}
                     </dd>
                   </div>
                 )}
               {viewingDetailsSession.meetingUrl && (
-                <div className="sm:col-span-2">
-                  <dt className="text-slate-500">رابط الجلسة الأونلاين</dt>
-                  <dd className="mt-0.5 break-all text-teal-700 font-mono-num">
+                <div className="col-12">
+                  <dt className="text-[#64748B]">رابط الجلسة الأونلاين</dt>
+                  <dd className="mt-0.5 break-all text-[#247BA0] font-mono-num mb-0">
                     {viewingDetailsSession.meetingUrl}
                   </dd>
                 </div>
               )}
             </dl>
             {viewingDetailsSession.description && (
-              <p className="text-xs text-slate-600 leading-relaxed">
+              <p className="text-xs text-[#64748B] leading-relaxed m-0">
                 {viewingDetailsSession.description}
               </p>
             )}
@@ -2117,46 +2107,46 @@ export function TeacherSessionManager({
       {/* Accepted Students Modal */}
       {viewingStudentsSession && (
         <div
-          className="fixed inset-0 z-50 bg-slate-900/50 flex items-center justify-center p-4"
+          className="fixed inset-0 z-50 bg-[#102A43]/60 backdrop-blur-xs flex items-center justify-center p-4"
           role="dialog"
           aria-modal="true"
         >
-          <div className="bg-white border border-slate-200 rounded-xl w-full max-w-lg p-6 space-y-4">
+          <div className="jusoor-card w-full max-w-lg p-5 sm:p-6 space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="font-display text-lg font-bold text-slate-900">
+              <h3 className="font-display text-lg font-bold text-[#102A43] m-0">
                 الطلاب المقبولون: {viewingStudentsSession.title}
               </h3>
               <button
                 type="button"
                 onClick={() => setViewingStudentsSession(null)}
-                className="text-xs font-semibold text-slate-600 hover:text-slate-900 cursor-pointer"
+                className="text-xs font-semibold text-[#64748B] hover:text-[#102A43] cursor-pointer"
               >
                 إغلاق
               </button>
             </div>
             {acceptedStudents.length === 0 ? (
-              <p className="text-sm text-slate-500 py-4 text-center">
+              <p className="text-sm text-[#64748B] py-4 text-center m-0">
                 لا يوجد طلاب مقبولون في هذه الجلسة بعد.
               </p>
             ) : (
-              <div className="divide-y divide-slate-100 max-h-80 overflow-y-auto">
+              <div className="divide-y divide-[#EDF2F7] max-h-80 overflow-y-auto">
                 {acceptedStudents.map((st) => (
                   <div key={st.enrollmentId} className="py-3 space-y-1">
-                    <div className="text-sm font-bold text-slate-900">
+                    <div className="text-sm font-bold text-[#102A43]">
                       {st.fullName}
                       {st.stageNameAr && (
-                        <span className="text-xs font-normal text-slate-500 mr-2">
+                        <span className="text-xs font-normal text-[#64748B] mr-2">
                           ({st.stageNameAr})
                         </span>
                       )}
                     </div>
                     {st.learningGoal && (
-                      <p className="text-xs text-slate-600">
+                      <p className="text-xs text-[#64748B] m-0">
                         {st.learningGoal}
                       </p>
                     )}
                     {st.notes && (
-                      <p className="text-xs text-teal-800">ملاحظة: {st.notes}</p>
+                      <p className="text-xs text-[#0F766E] m-0">ملاحظة: {st.notes}</p>
                     )}
                   </div>
                 ))}

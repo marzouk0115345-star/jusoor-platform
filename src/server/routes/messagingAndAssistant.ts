@@ -27,6 +27,9 @@ import {
   teachingSessions,
   sessionEnrollments,
   subjects,
+  fields,
+  courseLessons,
+  educationalStages,
   educationalGrades,
   educationalSystems,
 } from '../../db/schema.ts';
@@ -34,6 +37,7 @@ import { requireAuth, type AuthRequest } from '../auth.ts';
 import {
   formatOfflineAddress,
   isOfflineDeliveryMode,
+  resolveCourseFieldDisplay,
 } from '../../lib/domain.ts';
 import {
   getAiConfigurationStatus,
@@ -91,8 +95,46 @@ router.get('/dashboard', requireAuth, async (req: AuthRequest, res) => {
         .limit(10),
       db.select().from(certificates).where(eq(certificates.userId, uid)),
       db
-        .select()
+        .select({
+          id: courses.id,
+          title: courses.title,
+          slug: courses.slug,
+          subtitle: courses.subtitle,
+          description: courses.description,
+          customFieldName: courses.customFieldName,
+          targetAudience: courses.targetAudience,
+          fieldId: courses.fieldId,
+          taxonomyFieldNameAr: fields.nameAr,
+          subjectId: courses.subjectId,
+          subjectNameAr: subjects.nameAr,
+          stageId: courses.stageId,
+          stageNameAr: educationalStages.nameAr,
+          systemId: courses.systemId,
+          gradeId: courses.gradeId,
+          gradeNameAr: educationalGrades.nameAr,
+          divisionId: courses.divisionId,
+          pathwayId: courses.pathwayId,
+          level: courses.level,
+          language: courses.language,
+          price: courses.price,
+          currency: courses.currency,
+          maxStudents: courses.maxStudents,
+          enrollmentStatus: courses.enrollmentStatus,
+          thumbnailUrl: courses.thumbnailUrl,
+          coverImageKey: courses.coverImageKey,
+          status: courses.status,
+          centerId: courses.centerId,
+          instructorId: courses.instructorUserId,
+          instructorName: users.fullName,
+          createdAt: courses.createdAt,
+          updatedAt: courses.updatedAt,
+        })
         .from(courses)
+        .innerJoin(fields, eq(courses.fieldId, fields.id))
+        .innerJoin(users, eq(courses.instructorUserId, users.id))
+        .leftJoin(subjects, eq(courses.subjectId, subjects.id))
+        .leftJoin(educationalStages, eq(courses.stageId, educationalStages.id))
+        .leftJoin(educationalGrades, eq(courses.gradeId, educationalGrades.id))
         .where(eq(courses.instructorUserId, uid))
         .orderBy(desc(courses.createdAt)),
       db
@@ -132,16 +174,69 @@ router.get('/dashboard', requireAuth, async (req: AuthRequest, res) => {
       0
     );
 
-    const recommendedCourses = await db
+    const recommendedCoursesRaw = await db
       .select({
         id: courses.id,
         title: courses.title,
         subtitle: courses.subtitle,
         price: courses.price,
+        currency: courses.currency,
+        thumbnailUrl: courses.thumbnailUrl,
+        customFieldName: courses.customFieldName,
+        taxonomyFieldNameAr: fields.nameAr,
+        instructorName: users.fullName,
       })
       .from(courses)
-      .where(eq(courses.status, 'PUBLISHED'))
+      .innerJoin(users, eq(courses.instructorUserId, users.id))
+      .innerJoin(fields, eq(courses.fieldId, fields.id))
+      .where(and(eq(courses.status, 'PUBLISHED'), eq(users.accountStatus, 'ACTIVE')))
+      .orderBy(desc(courses.createdAt))
       .limit(3);
+
+    const recommendedCourses = recommendedCoursesRaw.map((rc) => ({
+      id: rc.id,
+      title: rc.title,
+      subtitle: rc.subtitle,
+      price: rc.price,
+      currency: rc.currency,
+      thumbnailUrl: rc.thumbnailUrl,
+      instructorName: rc.instructorName,
+      fieldNameAr: resolveCourseFieldDisplay(rc.customFieldName, rc.taxonomyFieldNameAr),
+    }));
+
+    const providerCourseIds = myCourses.map((c) => c.id);
+    const [providerCourseLessons, providerCourseEnrollments] =
+      providerCourseIds.length > 0
+        ? await Promise.all([
+            db
+              .select()
+              .from(courseLessons)
+              .where(inArray(courseLessons.courseId, providerCourseIds))
+              .orderBy(asc(courseLessons.sortOrder)),
+            db
+              .select({ id: enrollments.id, courseId: enrollments.courseId })
+              .from(enrollments)
+              .where(inArray(enrollments.courseId, providerCourseIds)),
+          ])
+        : [[], []];
+
+    const providerCourses = myCourses.map((c) => {
+      const cLessons = providerCourseLessons.filter((l) => l.courseId === c.id);
+      const cEnr = providerCourseEnrollments.filter((e) => e.courseId === c.id);
+      const resolvedField = resolveCourseFieldDisplay(
+        c.customFieldName,
+        c.taxonomyFieldNameAr
+      );
+      return {
+        ...c,
+        fieldNameAr: resolvedField,
+        customFieldName: c.customFieldName || resolvedField,
+        lessonsCount: cLessons.length,
+        totalMinutes: cLessons.reduce((s, l) => s + l.durationMinutes, 0),
+        enrollmentsCount: cEnr.length,
+        lessons: cLessons,
+      };
+    });
 
     const [myLessonEnrollmentsRaw, myTeachingSessions] = await Promise.all([
       db
@@ -259,6 +354,7 @@ router.get('/dashboard', requireAuth, async (req: AuthRequest, res) => {
         offersSubmittedCount: myOffers.length,
         totalNetEarnings: Number(totalEarningsNet.toFixed(2)),
       },
+      providerCourses,
       recommendedOpportunities: recommendedCourses,
     });
   } catch (error) {
@@ -662,7 +758,8 @@ router.post('/assistant/analyze', requireAuth, async (req: AuthRequest, res) => 
       db
         .select({ id: courses.id, title: courses.title, level: courses.level })
         .from(courses)
-        .where(eq(courses.status, 'PUBLISHED'))
+        .innerJoin(users, eq(courses.instructorUserId, users.id))
+        .where(and(eq(courses.status, 'PUBLISHED'), eq(users.accountStatus, 'ACTIVE')))
         .limit(6),
       db
         .select({
@@ -673,6 +770,7 @@ router.post('/assistant/analyze', requireAuth, async (req: AuthRequest, res) => 
         })
         .from(providerProfiles)
         .innerJoin(users, eq(providerProfiles.userId, users.id))
+        .where(eq(users.accountStatus, 'ACTIVE'))
         .limit(6),
     ]);
 

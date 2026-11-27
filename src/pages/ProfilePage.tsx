@@ -1,9 +1,11 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { Award, Briefcase, Building2, FileText, Trash2, UserCheck, Wallet } from 'lucide-react';
 import { apiFetch } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { SafeImage } from '../components/SafeImage';
+import { PageHeader } from '../components/ui/PageHeader';
+import { StateBanner } from '../components/ui/StateBanner';
+import { EmptyState } from '../components/ui/EmptyState';
 
 interface ProfDevResponse {
   cv: {
@@ -88,7 +90,8 @@ interface AuthMeDetailsResponse {
 }
 
 export function ProfilePage() {
-  const { user, taxonomy, openAuthModal, refreshUser } = useAuth();
+  const { user, taxonomy, openAuthModal, refreshUser, locale } = useAuth();
+  const isAr = locale === 'ar';
   const [profData, setProfData] = useState<ProfDevResponse | null>(null);
   const [ledger, setLedger] = useState<PaymentLedgerResponse | null>(null);
   const [centerMemberships, setCenterMemberships] = useState<
@@ -141,20 +144,35 @@ export function ProfilePage() {
 
   if (!user) {
     return (
-      <div className="max-w-3xl mx-auto px-4 py-16 text-center space-y-4">
-        <h1 className="font-display text-2xl font-bold text-slate-900">
-          الملف المهني والسيرة الذاتية
-        </h1>
-        <p className="text-sm text-slate-600">
-          سجّل الدخول لبناء سيرتك الذاتية ومعرض أعمالك وإدارة سجل مهاراتك.
-        </p>
-        <button
-          type="button"
-          onClick={openAuthModal}
-          className="px-6 py-3 bg-teal-700 text-white text-sm font-semibold rounded-lg cursor-pointer"
-        >
-          تسجيل الدخول
-        </button>
+      <div>
+        <PageHeader
+          title={isAr ? 'الملف المهني والسيرة الذاتية' : 'Professional Profile & CV'}
+          subtitle={
+            isAr
+              ? 'سجّل الدخول لبناء سيرتك الذاتية ومعرض أعمالك وإدارة سجل مهاراتك.'
+              : 'Sign in to build your CV, portfolio, and verified skill passport.'
+          }
+        />
+        <div className="container-xxl px-3 px-sm-4 py-5">
+          <EmptyState
+            icon="bi-person-vcard"
+            title={isAr ? 'يرجى تسجيل الدخول' : 'Sign in required'}
+            description={
+              isAr
+                ? 'الوصول إلى منشئ السيرة الذاتية وسجل المعاملات متاح للأعضاء المسجلين.'
+                : 'Sign in to access your CV builder and financial ledger.'
+            }
+            action={
+              <button
+                type="button"
+                onClick={openAuthModal}
+                className="btn-jusoor-primary px-5 py-2.5 text-sm cursor-pointer"
+              >
+                {isAr ? 'تسجيل الدخول' : 'Sign In'}
+              </button>
+            }
+          />
+        </div>
       </div>
     );
   }
@@ -261,481 +279,483 @@ export function ProfilePage() {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 space-y-8">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="font-display text-2xl sm:text-3xl font-extrabold text-slate-900">
-            الملف المهني والسجل المالي
-          </h1>
-          <p className="text-sm text-slate-600 mt-1">
-            منشئ السيرة الذاتية، النبذة التعريفية للمدرّب، معرض الأعمال، جواز المهارات، وسجل المعاملات.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-3">
-          {canEditInstructorBio && (
-            <Link
-              to={`/instructors/${user.id}`}
-              className="px-4 py-2.5 bg-white border border-slate-300 hover:border-teal-700 text-slate-800 text-xs font-semibold rounded-xl"
-            >
-              عرض ملفي العام كمدرّب
-            </Link>
-          )}
-          {profData?.skillPassport && (
-            <div className="bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-xs">
-              <div className="text-slate-500">جواز المهارات الرقمي</div>
-              <div className="font-mono-num font-bold text-teal-800">
-                {profData.skillPassport.passportCode}
+    <div>
+      <PageHeader
+        kicker={isAr ? 'الهوية المهنية والشهادات' : 'Career & Credentials'}
+        title={isAr ? 'الملف المهني والسجل المالي' : 'Professional Profile & Ledger'}
+        subtitle={
+          isAr
+            ? 'منشئ السيرة الذاتية، النبذة التعريفية للمدرّب، معرض الأعمال، جواز المهارات، وسجل المعاملات.'
+            : 'CV builder, instructor biography, portfolio projects, digital skill passport, and financial ledger.'
+        }
+        actions={
+          <div className="flex flex-wrap items-center gap-2.5">
+            {canEditInstructorBio && (
+              <Link
+                to={`/instructors/${user.id}`}
+                className="btn-jusoor-outline px-3.5 py-2 text-xs whitespace-nowrap"
+              >
+                عرض ملفي العام كمدرّب
+              </Link>
+            )}
+            {profData?.skillPassport && (
+              <div className="jusoor-subcard px-3.5 py-2 text-xs">
+                <div className="text-[#64748B]">جواز المهارات الرقمي</div>
+                <div className="font-mono-num font-bold text-[#0F766E]">
+                  {profData.skillPassport.passportCode}
+                </div>
               </div>
-            </div>
-          )}
-        </div>
-      </div>
+            )}
+          </div>
+        }
+      />
 
-      {feedback && (
-        <div className="p-4 rounded-xl bg-teal-50 border border-teal-200 text-sm text-teal-900">
-          {feedback}
-        </div>
-      )}
-      {error && (
-        <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-sm text-red-800">
-          {error}
-        </div>
-      )}
+      <div className="container-xxl px-3 px-sm-4 py-4 py-md-5 space-y-5">
+        {feedback && (
+          <StateBanner
+            variant="success"
+            message={feedback}
+            onDismiss={() => setFeedback(null)}
+          />
+        )}
+        {error && (
+          <StateBanner
+            variant="error"
+            message={error}
+            onDismiss={() => setError(null)}
+          />
+        )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Account + Instructor Bio + CV Builder */}
-        <div className="lg:col-span-6 space-y-6">
-          <form
-            onSubmit={handleSaveName}
-            className="bg-white border border-slate-200 rounded-xl p-6 space-y-3"
-          >
-            <h2 className="font-display text-lg font-bold text-slate-900">
-              بيانات الحساب
-            </h2>
-            <div>
-              <label className="block text-xs font-medium text-slate-700 mb-1">
-                الاسم الكامل
-              </label>
-              <input
-                type="text"
-                required
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
-                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg"
-              />
-            </div>
-            <button
-              type="submit"
-              className="px-4 py-2 bg-slate-900 text-white text-xs font-semibold rounded-lg cursor-pointer"
-            >
-              حفظ الاسم
-            </button>
-          </form>
-
-          {centerMemberships.length > 0 && (
-            <div className="bg-white border border-slate-200 rounded-xl p-6 space-y-3">
-              <h2 className="font-display text-base font-bold text-slate-900 flex items-center gap-2">
-                <Building2 className="w-4 h-4 text-teal-700" />
-                <span>الانتماء للمراكز التعليمية والمسمى الوظيفي</span>
+        <div className="row g-4">
+          {/* Left Column */}
+          <div className="col-12 col-lg-6 space-y-4">
+            <form onSubmit={handleSaveName} className="jusoor-card p-4 p-sm-5 space-y-3">
+              <h2 className="font-display text-lg font-bold text-[#102A43] m-0">
+                بيانات الحساب
               </h2>
-              <div className="divide-y divide-slate-100 text-xs">
-                {centerMemberships.map((m) => (
-                  <div
-                    key={m.id}
-                    className="py-2.5 flex items-center justify-between gap-2"
-                  >
-                    <div>
-                      <div className="font-semibold text-slate-900">
-                        {m.centerName}
-                      </div>
-                      <div className="text-slate-600 mt-0.5" dir="auto">
-                        {m.jobTitle?.trim() || m.memberRole}
-                      </div>
-                    </div>
-                    <span className="text-slate-500">
-                      {({
-                        OWNER: 'مالك المركز',
-                        MANAGER: 'مدير فرعي',
-                        INSTRUCTOR: 'مدرّب',
-                        STAFF: 'موظف مركز',
-                      } as Record<string, string>)[m.memberRole] || m.memberRole}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {canEditInstructorBio && (
-            <form
-              onSubmit={handleSaveAboutMe}
-              className="bg-white border border-slate-200 rounded-xl p-6 space-y-3"
-            >
-              <div className="flex items-center justify-between gap-2">
-                <h2 className="font-display text-lg font-bold text-slate-900 flex items-center gap-2">
-                  <UserCheck className="w-5 h-5 text-teal-700" />
-                  <span>نبذة عني — About Me</span>
-                </h2>
-                <Link
-                  to={`/instructors/${user.id}`}
-                  className="text-xs font-semibold text-teal-700 hover:underline"
-                >
-                  معاينة الصفحة العامة
-                </Link>
-              </div>
               <div>
-                <label
-                  htmlFor="instructor-headline"
-                  className="block text-xs font-medium text-slate-700 mb-1"
-                >
-                  المسمى المهني / التخصص
+                <label className="block text-xs font-semibold text-[#172B4D] mb-1">
+                  الاسم الكامل
                 </label>
                 <input
-                  id="instructor-headline"
                   type="text"
-                  value={bioHeadline}
-                  onChange={(e) => setBioHeadline(e.target.value)}
-                  placeholder="مثال: مدرّس تطوير واجهات أمامية React و TypeScript"
-                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg"
-                  dir="auto"
+                  required
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  className="jusoor-input w-full px-3 py-2 text-sm"
                 />
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className="sm:col-span-2">
-                  <label
-                    htmlFor="instructor-qualifications"
-                    className="block text-xs font-medium text-slate-700 mb-1"
+              <button
+                type="submit"
+                className="btn-jusoor-navy px-4 py-2 text-xs cursor-pointer"
+              >
+                حفظ الاسم
+              </button>
+            </form>
+
+            {centerMemberships.length > 0 && (
+              <div className="jusoor-card p-4 p-sm-5 space-y-3">
+                <h2 className="font-display text-base font-bold text-[#102A43] flex items-center gap-2 m-0">
+                  <i className="bi bi-building text-[#247BA0]" aria-hidden="true" />
+                  <span>الانتماء للمراكز التعليمية والمسمى الوظيفي</span>
+                </h2>
+                <div className="divide-y divide-[#EDF2F7] text-xs">
+                  {centerMemberships.map((m) => (
+                    <div
+                      key={m.id}
+                      className="py-2.5 flex items-center justify-between gap-2"
+                    >
+                      <div>
+                        <div className="font-bold text-[#102A43]">
+                          {m.centerName}
+                        </div>
+                        <div className="text-[#64748B] mt-0.5" dir="auto">
+                          {m.jobTitle?.trim() || m.memberRole}
+                        </div>
+                      </div>
+                      <span className="text-[#64748B]">
+                        {({
+                          OWNER: 'مالك المركز',
+                          MANAGER: 'مدير فرعي',
+                          INSTRUCTOR: 'مدرّب',
+                          STAFF: 'موظف مركز',
+                        } as Record<string, string>)[m.memberRole] || m.memberRole}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {canEditInstructorBio && (
+              <form
+                onSubmit={handleSaveAboutMe}
+                className="jusoor-card p-4 p-sm-5 space-y-3"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <h2 className="font-display text-lg font-bold text-[#102A43] flex items-center gap-2 m-0">
+                    <i className="bi bi-person-check text-[#0F766E]" aria-hidden="true" />
+                    <span>نبذة عني — About Me</span>
+                  </h2>
+                  <Link
+                    to={`/instructors/${user.id}`}
+                    className="text-xs font-semibold text-[#0F766E] hover:underline"
                   >
-                    المؤهلات العلمية والشهادات
-                  </label>
-                  <input
-                    id="instructor-qualifications"
-                    type="text"
-                    value={qualifications}
-                    onChange={(e) => setQualifications(e.target.value)}
-                    placeholder="مثال: ماجستير هندسة البرمجيات"
-                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg"
-                    dir="auto"
-                  />
+                    معاينة الصفحة العامة
+                  </Link>
                 </div>
                 <div>
                   <label
-                    htmlFor="instructor-years-exp"
-                    className="block text-xs font-medium text-slate-700 mb-1"
+                    htmlFor="instructor-headline"
+                    className="block text-xs font-semibold text-[#172B4D] mb-1"
                   >
-                    سنوات الخبرة
+                    المسمى المهني / التخصص
                   </label>
                   <input
-                    id="instructor-years-exp"
-                    type="number"
-                    min="0"
-                    max="70"
-                    value={yearsExperience}
-                    onChange={(e) => setYearsExperience(e.target.value)}
-                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg font-mono-num"
+                    id="instructor-headline"
+                    type="text"
+                    value={bioHeadline}
+                    onChange={(e) => setBioHeadline(e.target.value)}
+                    placeholder="مثال: مدرّس تطوير واجهات أمامية React و TypeScript"
+                    className="jusoor-input w-full px-3 py-2 text-sm"
+                    dir="auto"
                   />
                 </div>
+                <div className="row g-2.5">
+                  <div className="col-12 col-sm-8">
+                    <label
+                      htmlFor="instructor-qualifications"
+                      className="block text-xs font-semibold text-[#172B4D] mb-1"
+                    >
+                      المؤهلات العلمية والشهادات
+                    </label>
+                    <input
+                      id="instructor-qualifications"
+                      type="text"
+                      value={qualifications}
+                      onChange={(e) => setQualifications(e.target.value)}
+                      placeholder="مثال: ماجستير هندسة البرمجيات"
+                      className="jusoor-input w-full px-3 py-2 text-sm"
+                      dir="auto"
+                    />
+                  </div>
+                  <div className="col-12 col-sm-4">
+                    <label
+                      htmlFor="instructor-years-exp"
+                      className="block text-xs font-semibold text-[#172B4D] mb-1"
+                    >
+                      سنوات الخبرة
+                    </label>
+                    <input
+                      id="instructor-years-exp"
+                      type="number"
+                      min="0"
+                      max="70"
+                      value={yearsExperience}
+                      onChange={(e) => setYearsExperience(e.target.value)}
+                      className="jusoor-input w-full px-3 py-2 text-sm font-mono-num"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label
+                      htmlFor="instructor-about-me"
+                      className="block text-xs font-semibold text-[#172B4D]"
+                    >
+                      About Me — نبذة عني (السيرة المهنية للطلاب)
+                    </label>
+                    <span className="text-[11px] font-mono-num text-[#64748B]">
+                      {aboutMeBio.length}/3000
+                    </span>
+                  </div>
+                  <textarea
+                    id="instructor-about-me"
+                    rows={5}
+                    maxLength={3000}
+                    value={aboutMeBio}
+                    onChange={(e) => setAboutMeBio(e.target.value)}
+                    placeholder="عرّف الطلاب بنفسك: خلفيتك الأكاديمية، مؤهلاتك، سنوات خبرتك في التدريس، التخصصات والمواد التي تدرّسها، وأسلوبك التعليمي..."
+                    className="jusoor-textarea w-full px-3 py-2 text-sm"
+                    dir="auto"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={savingBio}
+                  className="btn-jusoor-primary px-5 py-2 text-xs cursor-pointer"
+                >
+                  {savingBio ? 'جارٍ الحفظ...' : 'حفظ النبذة التعريفية'}
+                </button>
+              </form>
+            )}
+
+            <form onSubmit={handleSaveCv} className="jusoor-card p-4 p-sm-5 space-y-3">
+              <h2 className="font-display text-lg font-bold text-[#102A43] flex items-center gap-2 m-0">
+                <i className="bi bi-file-earmark-text text-[#247BA0]" aria-hidden="true" />
+                <span>منشئ السيرة الذاتية (CV Builder)</span>
+              </h2>
+              <div>
+                <label className="block text-xs font-semibold text-[#172B4D] mb-1">
+                  المسمى المهني
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={cvHeadline}
+                  onChange={(e) => setCvHeadline(e.target.value)}
+                  placeholder="مثال: مطوّر واجهات أمامية React & TypeScript"
+                  className="jusoor-input w-full px-3 py-2 text-sm"
+                />
               </div>
               <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label
-                    htmlFor="instructor-about-me"
-                    className="block text-xs font-medium text-slate-700"
-                  >
-                    About Me — نبذة عني (السيرة المهنية للطلاب)
-                  </label>
-                  <span className="text-[11px] font-mono-num text-slate-400">
-                    {aboutMeBio.length}/3000
-                  </span>
-                </div>
+                <label className="block text-xs font-semibold text-[#172B4D] mb-1">
+                  الملخص المهني
+                </label>
                 <textarea
-                  id="instructor-about-me"
-                  rows={5}
-                  maxLength={3000}
-                  value={aboutMeBio}
-                  onChange={(e) => setAboutMeBio(e.target.value)}
-                  placeholder="عرّف الطلاب بنفسك: خلفيتك الأكاديمية، مؤهلاتك، سنوات خبرتك في التدريس، التخصصات والمواد التي تدرّسها، وأسلوبك التعليمي..."
-                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg"
-                  dir="auto"
+                  required
+                  rows={4}
+                  value={cvSummary}
+                  onChange={(e) => setCvSummary(e.target.value)}
+                  placeholder="ملخص خبراتك وأهدافك العملية..."
+                  className="jusoor-textarea w-full px-3 py-2 text-sm"
                 />
               </div>
               <button
                 type="submit"
-                disabled={savingBio}
-                className="px-5 py-2.5 bg-teal-700 hover:bg-teal-800 text-white text-xs font-semibold rounded-lg cursor-pointer disabled:opacity-60"
+                className="btn-jusoor-primary px-5 py-2 text-xs cursor-pointer"
               >
-                {savingBio ? 'جارٍ الحفظ...' : 'حفظ النبذة التعريفية'}
+                حفظ السيرة الذاتية
               </button>
             </form>
-          )}
 
-          <form
-            onSubmit={handleSaveCv}
-            className="bg-white border border-slate-200 rounded-xl p-6 space-y-3"
-          >
-            <h2 className="font-display text-lg font-bold text-slate-900 flex items-center gap-2">
-              <FileText className="w-5 h-5 text-teal-700" />
-              <span>منشئ السيرة الذاتية (CV Builder)</span>
-            </h2>
-            <div>
-              <label className="block text-xs font-medium text-slate-700 mb-1">
-                المسمى المهني
-              </label>
-              <input
-                type="text"
-                required
-                value={cvHeadline}
-                onChange={(e) => setCvHeadline(e.target.value)}
-                placeholder="مثال: مطوّر واجهات أمامية React & TypeScript"
-                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-slate-700 mb-1">
-                الملخص المهني
-              </label>
-              <textarea
-                required
-                rows={4}
-                value={cvSummary}
-                onChange={(e) => setCvSummary(e.target.value)}
-                placeholder="ملخص خبراتك وأهدافك العملية..."
-                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg"
-              />
-            </div>
-            <button
-              type="submit"
-              className="px-5 py-2.5 bg-teal-700 hover:bg-teal-800 text-white text-xs font-semibold rounded-lg cursor-pointer"
-            >
-              حفظ السيرة الذاتية
-            </button>
-          </form>
-
-          {/* Skills */}
-          <div className="bg-white border border-slate-200 rounded-xl p-6 space-y-4">
-            <h2 className="font-display text-lg font-bold text-slate-900">
-              المهارات المسجلة ({profData?.skills.length ?? 0})
-            </h2>
-            <div className="divide-y divide-slate-100 text-xs">
-              {profData?.skills.map((s) => (
-                <div
-                  key={s.id}
-                  className="py-2 flex items-center justify-between"
-                >
-                  <span className="font-semibold text-slate-900">
-                    {s.nameAr}
-                  </span>
-                  <span className="text-slate-500">
-                    {({
-                      BEGINNER: 'مبتدئ',
-                      INTERMEDIATE: 'متوسط',
-                      ADVANCED: 'متقدم',
-                      EXPERT: 'خبير',
-                    } as Record<string, string>)[s.proficiencyLevel] ||
-                      s.proficiencyLevel}
-                    {s.verifiedByPassport && ' · موثّقة'}
-                  </span>
-                </div>
-              ))}
-            </div>
-            <form onSubmit={handleAddSkill} className="flex gap-2 pt-2">
-              <select
-                value={selectedSkillId}
-                onChange={(e) => setSelectedSkillId(e.target.value)}
-                className="flex-1 px-3 py-2 text-xs border border-slate-300 rounded-lg bg-white"
-              >
-                {taxonomy?.skills.map((sk) => (
-                  <option key={sk.id} value={sk.id}>
-                    {sk.nameAr}
-                  </option>
-                ))}
-              </select>
-              <select
-                value={skillLevel}
-                onChange={(e) => setSkillLevel(e.target.value)}
-                className="px-3 py-2 text-xs border border-slate-300 rounded-lg bg-white"
-              >
-                <option value="BEGINNER">مبتدئ</option>
-                <option value="INTERMEDIATE">متوسط</option>
-                <option value="ADVANCED">متقدم</option>
-                <option value="EXPERT">خبير</option>
-              </select>
-              <button
-                type="submit"
-                className="px-3 py-2 bg-slate-900 text-white text-xs font-semibold rounded-lg cursor-pointer"
-              >
-                إضافة
-              </button>
-            </form>
-          </div>
-        </div>
-
-        {/* Portfolio + Certificates + Payments */}
-        <div className="lg:col-span-6 space-y-6">
-          <div className="bg-white border border-slate-200 rounded-xl p-6 space-y-4">
-            <h2 className="font-display text-lg font-bold text-slate-900 flex items-center gap-2">
-              <Briefcase className="w-5 h-5 text-teal-700" />
-              <span>معرض الأعمال ({profData?.portfolios.length ?? 0})</span>
-            </h2>
-            <div className="space-y-3">
-              {profData?.portfolios.map((item) => (
-                <div
-                  key={item.id}
-                  className="p-3 border border-slate-200 rounded-lg flex items-start gap-3"
-                >
-                  <div className="w-20 h-16 rounded-md overflow-hidden shrink-0 bg-slate-100">
-                    <SafeImage
-                      src={item.imageUrl}
-                      alt={item.title}
-                      className="w-full h-full object-cover"
-                    />
-                  </div>
-                  <div className="flex-1 min-w-0 space-y-1">
-                    <div className="text-sm font-bold text-slate-900 truncate">
-                      {item.title}
-                    </div>
-                    <p className="text-xs text-slate-600 line-clamp-2">
-                      {item.description}
-                    </p>
-                    {item.skillsSummary && (
-                      <div className="text-[11px] text-slate-500">
-                        {item.skillsSummary}
-                      </div>
-                    )}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => handleDeleteProject(item.id)}
-                    aria-label={`حذف ${item.title}`}
-                    className="p-1.5 text-slate-400 hover:text-red-600 cursor-pointer"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              ))}
-            </div>
-
-            <form
-              onSubmit={handleAddProject}
-              className="pt-3 border-t border-slate-200 space-y-2.5"
-            >
-              <div className="text-xs font-bold text-slate-800">
-                إضافة مشروع جديد للمعرض
-              </div>
-              <input
-                type="text"
-                required
-                placeholder="اسم المشروع"
-                value={projTitle}
-                onChange={(e) => setProjTitle(e.target.value)}
-                className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg"
-              />
-              <textarea
-                required
-                rows={2}
-                placeholder="وصف المشروع ودورك فيه"
-                value={projDesc}
-                onChange={(e) => setProjDesc(e.target.value)}
-                className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg"
-              />
-              <input
-                type="text"
-                placeholder="التقنيات المستخدمة (مثال: React · TypeScript)"
-                value={projSkills}
-                onChange={(e) => setProjSkills(e.target.value)}
-                className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg"
-              />
-              <button
-                type="submit"
-                className="px-4 py-2 bg-teal-700 hover:bg-teal-800 text-white text-xs font-semibold rounded-lg cursor-pointer"
-              >
-                إضافة للمعرض
-              </button>
-            </form>
-          </div>
-
-          {/* Certificates */}
-          <div className="bg-white border border-slate-200 rounded-xl p-6 space-y-3">
-            <h2 className="font-display text-base font-bold text-slate-900 flex items-center gap-2">
-              <Award className="w-4 h-4 text-teal-700" />
-              <span>الشهادات المعتمدة ({profData?.certificates.length ?? 0})</span>
-            </h2>
-            {profData?.certificates.length === 0 ? (
-              <p className="text-xs text-slate-500">
-                ستصدر الشهادات تلقائياً عند إتمام 100% من دروس أي دورة.
-              </p>
-            ) : (
-              <div className="divide-y divide-slate-100 text-xs">
-                {profData?.certificates.map((c) => (
+            {/* Skills */}
+            <div className="jusoor-card p-4 p-sm-5 space-y-4">
+              <h2 className="font-display text-lg font-bold text-[#102A43] m-0">
+                المهارات المسجلة ({profData?.skills.length ?? 0})
+              </h2>
+              <div className="divide-y divide-[#EDF2F7] text-xs">
+                {profData?.skills.map((s) => (
                   <div
-                    key={c.id}
+                    key={s.id}
+                    className="py-2 flex items-center justify-between"
+                  >
+                    <span className="font-bold text-[#102A43]">
+                      {s.nameAr}
+                    </span>
+                    <span className="text-[#64748B]">
+                      {({
+                        BEGINNER: 'مبتدئ',
+                        INTERMEDIATE: 'متوسط',
+                        ADVANCED: 'متقدم',
+                        EXPERT: 'خبير',
+                      } as Record<string, string>)[s.proficiencyLevel] ||
+                        s.proficiencyLevel}
+                      {s.verifiedByPassport && ' · موثّقة'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <form onSubmit={handleAddSkill} className="flex flex-wrap gap-2 pt-2">
+                <select
+                  value={selectedSkillId}
+                  onChange={(e) => setSelectedSkillId(e.target.value)}
+                  className="jusoor-select flex-1 px-3 py-2 text-xs"
+                >
+                  {taxonomy?.skills.map((sk) => (
+                    <option key={sk.id} value={sk.id}>
+                      {sk.nameAr}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={skillLevel}
+                  onChange={(e) => setSkillLevel(e.target.value)}
+                  className="jusoor-select px-3 py-2 text-xs"
+                >
+                  <option value="BEGINNER">مبتدئ</option>
+                  <option value="INTERMEDIATE">متوسط</option>
+                  <option value="ADVANCED">متقدم</option>
+                  <option value="EXPERT">خبير</option>
+                </select>
+                <button
+                  type="submit"
+                  className="btn-jusoor-navy px-3 py-2 text-xs cursor-pointer"
+                >
+                  إضافة
+                </button>
+              </form>
+            </div>
+          </div>
+
+          {/* Right Column */}
+          <div className="col-12 col-lg-6 space-y-4">
+            <div className="jusoor-card p-4 p-sm-5 space-y-4">
+              <h2 className="font-display text-lg font-bold text-[#102A43] flex items-center gap-2 m-0">
+                <i className="bi bi-briefcase text-[#247BA0]" aria-hidden="true" />
+                <span>معرض الأعمال ({profData?.portfolios.length ?? 0})</span>
+              </h2>
+              <div className="space-y-3">
+                {profData?.portfolios.map((item) => (
+                  <div
+                    key={item.id}
+                    className="jusoor-subcard p-3 flex items-start gap-3"
+                  >
+                    <div className="w-20 h-16 rounded-lg overflow-hidden shrink-0 bg-[#EEF4FA]">
+                      <SafeImage
+                        src={item.imageUrl}
+                        alt={item.title}
+                        fallbackTitle={item.title}
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                    <div className="flex-1 min-w-0 space-y-1">
+                      <div className="text-sm font-bold text-[#102A43] truncate">
+                        {item.title}
+                      </div>
+                      <p className="text-xs text-[#64748B] line-clamp-2 m-0">
+                        {item.description}
+                      </p>
+                      {item.skillsSummary && (
+                        <div className="text-[11px] text-[#64748B]">
+                          {item.skillsSummary}
+                        </div>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteProject(item.id)}
+                      aria-label={`حذف ${item.title}`}
+                      className="p-1.5 text-[#64748B] hover:text-[#DC2626] cursor-pointer"
+                    >
+                      <i className="bi bi-trash" aria-hidden="true" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              <form
+                onSubmit={handleAddProject}
+                className="pt-3 border-t border-[#DCE5F0] space-y-2.5"
+              >
+                <div className="text-xs font-bold text-[#102A43]">
+                  إضافة مشروع جديد للمعرض
+                </div>
+                <input
+                  type="text"
+                  required
+                  placeholder="اسم المشروع"
+                  value={projTitle}
+                  onChange={(e) => setProjTitle(e.target.value)}
+                  className="jusoor-input w-full px-3 py-2 text-xs"
+                />
+                <textarea
+                  required
+                  rows={2}
+                  placeholder="وصف المشروع ودورك فيه"
+                  value={projDesc}
+                  onChange={(e) => setProjDesc(e.target.value)}
+                  className="jusoor-textarea w-full px-3 py-2 text-xs"
+                />
+                <input
+                  type="text"
+                  placeholder="التقنيات المستخدمة (مثال: React · TypeScript)"
+                  value={projSkills}
+                  onChange={(e) => setProjSkills(e.target.value)}
+                  className="jusoor-input w-full px-3 py-2 text-xs"
+                />
+                <button
+                  type="submit"
+                  className="btn-jusoor-primary px-4 py-2 text-xs cursor-pointer"
+                >
+                  إضافة للمعرض
+                </button>
+              </form>
+            </div>
+
+            {/* Certificates */}
+            <div className="jusoor-card p-4 p-sm-5 space-y-3">
+              <h2 className="font-display text-base font-bold text-[#102A43] flex items-center gap-2 m-0">
+                <i className="bi bi-award text-[#0F766E]" aria-hidden="true" />
+                <span>الشهادات المعتمدة ({profData?.certificates.length ?? 0})</span>
+              </h2>
+              {profData?.certificates.length === 0 ? (
+                <p className="text-xs text-[#64748B] m-0">
+                  ستصدر الشهادات تلقائياً عند إتمام 100% من دروس أي دورة.
+                </p>
+              ) : (
+                <div className="divide-y divide-[#EDF2F7] text-xs">
+                  {profData?.certificates.map((c) => (
+                    <div
+                      key={c.id}
+                      className="py-2 flex items-center justify-between gap-2"
+                    >
+                      <span className="font-bold text-[#102A43]">
+                        {c.title}
+                      </span>
+                      <span className="font-mono-num text-[#0F766E]">
+                        {c.credentialCode}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Payments & Earnings Sandbox Ledger */}
+            <div className="jusoor-card p-4 p-sm-5 space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <h2 className="font-display text-base font-bold text-[#102A43] flex items-center gap-2 m-0">
+                  <i className="bi bi-wallet2 text-[#247BA0]" aria-hidden="true" />
+                  <span>السجل المالي والعمولات</span>
+                </h2>
+                <span className="text-[11px] text-[#B45309] font-bold">
+                  {ledger?.gatewayConfigured
+                    ? 'بوابة دفع مفعلة'
+                    : 'وضع التجربة المعلق (Sandbox)'}
+                </span>
+              </div>
+              {!ledger?.gatewayConfigured && (
+                <p className="text-xs text-[#64748B] m-0">
+                  بوابة الدفع الحقيقية بانتظار ضبط مفاتيح المزود؛ تُسجل المعاملات هنا بشفافية دون تنفيذ تحصيل مالي فعلي.
+                </p>
+              )}
+              <div className="divide-y divide-[#EDF2F7] text-xs">
+                {ledger?.payments.map((p) => (
+                  <div
+                    key={p.id}
                     className="py-2 flex items-center justify-between gap-2"
                   >
-                    <span className="font-semibold text-slate-900">
-                      {c.title}
-                    </span>
-                    <span className="font-mono-num text-teal-700">
-                      {c.credentialCode}
-                    </span>
+                    <div>
+                      <div className="font-mono-num font-bold text-[#102A43]">
+                        {p.paymentReference}
+                      </div>
+                      <div className="text-[#64748B]">
+                        {({
+                          COURSE_ENROLLMENT: 'تسجيل دورة',
+                          TASK_OFFER: 'عرض مهمة تعليمية',
+                          BOOKING: 'حجز جلسة',
+                        } as Record<string, string>)[p.entityType] ||
+                          p.entityType}{' '}
+                        ·{' '}
+                        {({
+                          PENDING_SETUP: 'بانتظار تفعيل بوابة الدفع',
+                          PENDING: 'قيد المراجعة',
+                          HELD: 'محجوز بالضمان',
+                          PAID: 'مدفوع',
+                          REFUNDED: 'مسترد',
+                        } as Record<string, string>)[p.status] || p.status}
+                      </div>
+                    </div>
+                    <div className="text-end font-mono-num">
+                      <div className="font-bold text-[#102A43]">${p.amount}</div>
+                      <div className="text-[11px] text-[#64748B]">
+                        عمولة ${p.commissionAmount}
+                      </div>
+                    </div>
                   </div>
                 ))}
               </div>
-            )}
-          </div>
-
-          {/* Payments & Earnings Sandbox Ledger */}
-          <div className="bg-white border border-slate-200 rounded-xl p-6 space-y-3">
-            <div className="flex items-center justify-between">
-              <h2 className="font-display text-base font-bold text-slate-900 flex items-center gap-2">
-                <Wallet className="w-4 h-4 text-teal-700" />
-                <span>السجل المالي والعمولات</span>
-              </h2>
-              <span className="text-[11px] text-amber-700 font-semibold">
-                {ledger?.gatewayConfigured
-                  ? 'بوابة دفع مفعلة'
-                  : 'وضع التجربة المعلق (Sandbox)'}
-              </span>
-            </div>
-            {!ledger?.gatewayConfigured && (
-              <p className="text-xs text-slate-500">
-                بوابة الدفع الحقيقية بانتظار ضبط مفاتيح المزود؛ تُسجل المعاملات هنا بشفافية دون تنفيذ تحصيل مالي فعلي.
-              </p>
-            )}
-            <div className="divide-y divide-slate-100 text-xs">
-              {ledger?.payments.map((p) => (
-                <div
-                  key={p.id}
-                  className="py-2 flex items-center justify-between gap-2"
-                >
-                  <div>
-                    <div className="font-mono-num font-semibold text-slate-900">
-                      {p.paymentReference}
-                    </div>
-                    <div className="text-slate-500">
-                      {({
-                        COURSE_ENROLLMENT: 'تسجيل دورة',
-                        TASK_OFFER: 'عرض مهمة تعليمية',
-                        BOOKING: 'حجز جلسة',
-                      } as Record<string, string>)[p.entityType] ||
-                        p.entityType}{' '}
-                      · الحالة:{' '}
-                      {({
-                        PENDING_SETUP: 'بانتظار تفعيل بوابة الدفع',
-                        PENDING: 'قيد المراجعة',
-                        HELD: 'محجوز بالضمان',
-                        PAID: 'مدفوع',
-                        REFUNDED: 'مسترد',
-                      } as Record<string, string>)[p.status] || p.status}
-                    </div>
-                  </div>
-                  <div className="text-left font-mono-num">
-                    <div className="font-bold text-slate-900">${p.amount}</div>
-                    <div className="text-[11px] text-slate-500">
-                      عمولة ${p.commissionAmount}
-                    </div>
-                  </div>
-                </div>
-              ))}
             </div>
           </div>
         </div>

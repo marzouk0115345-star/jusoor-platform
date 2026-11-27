@@ -30,6 +30,7 @@ import {
 import {
   canTransitionTaskStatus,
   calculateCommissionAndNet,
+  validateTaskDeadline,
 } from '../../lib/domain.ts';
 
 const router = Router();
@@ -50,6 +51,7 @@ router.get('/tasks', optionalAuth, async (req: AuthRequest, res) => {
         id: educationalTasks.id,
         studentUserId: educationalTasks.studentUserId,
         studentName: users.fullName,
+        studentStatus: users.accountStatus,
         categoryId: educationalTasks.categoryId,
         categoryNameAr: taskCategories.nameAr,
         fieldId: educationalTasks.fieldId,
@@ -86,7 +88,9 @@ router.get('/tasks', optionalAuth, async (req: AuthRequest, res) => {
       .orderBy(desc(educationalTasks.createdAt));
 
     const filtered = rows.filter((t) => {
-      if (mine && req.authUser && t.studentUserId !== req.authUser.id) {
+      if (mine && req.authUser) {
+        if (t.studentUserId !== req.authUser.id) return false;
+      } else if (t.studentStatus !== 'ACTIVE') {
         return false;
       }
       if (statusFilter && t.status !== statusFilter) return false;
@@ -124,6 +128,7 @@ router.get('/tasks/:id', optionalAuth, async (req: AuthRequest, res) => {
         id: educationalTasks.id,
         studentUserId: educationalTasks.studentUserId,
         studentName: users.fullName,
+        studentStatus: users.accountStatus,
         categoryId: educationalTasks.categoryId,
         categoryNameAr: taskCategories.nameAr,
         fieldId: educationalTasks.fieldId,
@@ -180,6 +185,18 @@ router.get('/tasks/:id', optionalAuth, async (req: AuthRequest, res) => {
       )
       .where(eq(taskOffers.taskId, taskId))
       .orderBy(asc(taskOffers.createdAt));
+
+    if (taskRow.studentStatus !== 'ACTIVE') {
+      const callerId = req.authUser?.id;
+      const isAdmin = req.authUser?.roles.includes('ADMIN') ?? false;
+      const isOwner = Boolean(callerId && taskRow.studentUserId === callerId);
+      const isOfferTeacher = Boolean(
+        callerId && offersRows.some((o) => o.teacherUserId === callerId)
+      );
+      if (!isAdmin && !isOwner && !isOfferTeacher) {
+        return res.status(404).json({ error: 'المهمة التعليمية غير موجودة.' });
+      }
+    }
 
     const attachments = await db
       .select()
@@ -251,6 +268,10 @@ router.post('/tasks', requireAuth, async (req: AuthRequest, res) => {
     }
 
     const d = parsed.data;
+    const deadlineError = validateTaskDeadline(d.deadline);
+    if (deadlineError) {
+      return res.status(400).json({ error: deadlineError });
+    }
     const createdTask = await db.transaction(async (tx) => {
       const [taskRow] = await tx
         .insert(educationalTasks)
@@ -320,11 +341,18 @@ router.post(
       }
 
       const [taskRow] = await db
-        .select()
+        .select({
+          id: educationalTasks.id,
+          studentUserId: educationalTasks.studentUserId,
+          status: educationalTasks.status,
+          title: educationalTasks.title,
+          studentStatus: users.accountStatus,
+        })
         .from(educationalTasks)
+        .innerJoin(users, eq(educationalTasks.studentUserId, users.id))
         .where(eq(educationalTasks.id, taskId))
         .limit(1);
-      if (!taskRow) {
+      if (!taskRow || taskRow.studentStatus !== 'ACTIVE') {
         return res.status(404).json({ error: 'المهمة غير موجودة.' });
       }
       if (taskRow.studentUserId === req.authUser!.id) {

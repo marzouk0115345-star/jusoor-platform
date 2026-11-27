@@ -20,7 +20,11 @@ import {
   requireRole,
   type AuthRequest,
 } from '../auth.ts';
-import { calculateCommissionAndNet } from '../../lib/domain.ts';
+import {
+  calculateCommissionAndNet,
+  validateAvailabilitySlot,
+  mapBookingStatusToSessionStatus,
+} from '../../lib/domain.ts';
 
 const router = Router();
 
@@ -148,6 +152,10 @@ router.post(
       }
 
       const d = parsed.data;
+      const slotError = validateAvailabilitySlot(d.slotDate, d.startTime, d.endTime);
+      if (slotError) {
+        return res.status(400).json({ error: slotError });
+      }
       const [created] = await db
         .insert(availability)
         .values({
@@ -264,6 +272,15 @@ router.post('/bookings', requireAuth, async (req: AuthRequest, res) => {
       const slot = claimedSlots[0];
       if (slot.providerUserId === req.authUser!.id) {
         throw new Error('CANNOT_BOOK_SELF');
+      }
+
+      const [providerUser] = await tx
+        .select({ accountStatus: users.accountStatus })
+        .from(users)
+        .where(eq(users.id, slot.providerUserId))
+        .limit(1);
+      if (!providerUser || providerUser.accountStatus !== 'ACTIVE') {
+        throw new Error('SLOT_UNAVAILABLE');
       }
 
       const [pp] = await tx
@@ -451,6 +468,15 @@ router.patch('/bookings/:id/status', requireAuth, async (req: AuthRequest, res) 
         })
         .where(eq(bookings.id, bookingId))
         .returning();
+
+      const nextSessionStatus = mapBookingStatusToSessionStatus(parsed.data.status);
+      await tx
+        .update(sessions)
+        .set({
+          status: nextSessionStatus,
+          ...(nextSessionStatus === 'COMPLETED' ? { endedAt: new Date() } : {}),
+        })
+        .where(eq(sessions.bookingId, bookingId));
 
       return row;
     });

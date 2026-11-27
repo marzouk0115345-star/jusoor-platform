@@ -3,6 +3,7 @@
   "appId": "1:26726201636:web:a455b7073d881be2c19bb1",
   "apiKey": "AIzaSyAcHELWKV8fIvBuWXLFGd3O2iFwCXmMmj8",
   "authDomain": "inner-ship-2klwk.firebaseapp.com",
+  "firestoreDatabaseId": "ai-studio-jusoor-2bafb3bf-2ad9-415e-b952-c759d761e11f",
   "storageBucket": "inner-ship-2klwk.firebasestorage.app",
   "messagingSenderId": "26726201636",
   "measurementId": "",

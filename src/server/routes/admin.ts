@@ -22,6 +22,7 @@ import {
   platformSettings,
 } from '../../db/schema.ts';
 import { requireAuth, requireRole, type AuthRequest } from '../auth.ts';
+import { classifyRecordOrigin, type RecordOrigin } from '../../lib/domain.ts';
 
 const router = Router();
 
@@ -40,10 +41,39 @@ router.get('/admin/overview', async (_req, res) => {
       allCenters,
       settings,
     ] = await Promise.all([
-      db.select({ id: users.id, isDemo: users.isDemo }).from(users),
-      db.select({ id: courses.id, status: courses.status }).from(courses),
-      db.select({ id: educationalTasks.id, status: educationalTasks.status }).from(educationalTasks),
-      db.select({ id: bookings.id, status: bookings.status }).from(bookings),
+      db
+        .select({
+          id: users.id,
+          email: users.email,
+          isDemo: users.isDemo,
+          accountStatus: users.accountStatus,
+        })
+        .from(users),
+      db
+        .select({
+          id: courses.id,
+          status: courses.status,
+          isDemo: courses.isDemo,
+          instructorUserId: courses.instructorUserId,
+        })
+        .from(courses),
+      db
+        .select({
+          id: educationalTasks.id,
+          status: educationalTasks.status,
+          isDemo: educationalTasks.isDemo,
+          studentUserId: educationalTasks.studentUserId,
+        })
+        .from(educationalTasks),
+      db
+        .select({
+          id: bookings.id,
+          status: bookings.status,
+          isDemo: bookings.isDemo,
+          studentUserId: bookings.studentUserId,
+          providerUserId: bookings.providerUserId,
+        })
+        .from(bookings),
       db.select().from(payments).orderBy(desc(payments.createdAt)),
       db.select().from(reports).orderBy(desc(reports.createdAt)),
       db.select().from(verifications).orderBy(desc(verifications.createdAt)),
@@ -51,31 +81,72 @@ router.get('/admin/overview', async (_req, res) => {
       db.select().from(platformSettings),
     ]);
 
-    const totalVolume = allPayments.reduce((s, p) => s + Number(p.amount), 0);
-    const totalCommission = allPayments.reduce(
+    const userOriginMap = new Map<number, RecordOrigin>();
+    for (const u of allUsers) {
+      userOriginMap.set(u.id, classifyRecordOrigin(u.email, u.isDemo));
+    }
+
+    const originOfUser = (uid: number | null | undefined): RecordOrigin =>
+      uid ? userOriginMap.get(uid) ?? 'REAL' : 'REAL';
+
+    const nonQaUsers = allUsers.filter((u) => originOfUser(u.id) !== 'QA_TEST');
+    const qaUsers = allUsers.filter((u) => originOfUser(u.id) === 'QA_TEST');
+
+    const nonQaCourses = allCourses.filter(
+      (c) => originOfUser(c.instructorUserId) !== 'QA_TEST'
+    );
+    const nonQaTasks = allTasks.filter(
+      (t) => originOfUser(t.studentUserId) !== 'QA_TEST'
+    );
+    const nonQaBookings = allBookings.filter(
+      (b) =>
+        originOfUser(b.studentUserId) !== 'QA_TEST' &&
+        originOfUser(b.providerUserId) !== 'QA_TEST'
+    );
+    const nonQaCenters = allCenters.filter(
+      (c) => originOfUser(c.ownerUserId) !== 'QA_TEST'
+    );
+    const nonQaPayments = allPayments.filter(
+      (p) =>
+        originOfUser(p.payerUserId) !== 'QA_TEST' &&
+        originOfUser(p.payeeUserId) !== 'QA_TEST'
+    );
+
+    const totalVolume = nonQaPayments.reduce((s, p) => s + Number(p.amount), 0);
+    const totalCommission = nonQaPayments.reduce(
       (s, p) => s + Number(p.commissionAmount),
       0
     );
 
     res.json({
       stats: {
-        usersCount: allUsers.length,
-        realUsersCount: allUsers.filter((u) => !u.isDemo).length,
-        coursesCount: allCourses.length,
-        publishedCoursesCount: allCourses.filter((c) => c.status === 'PUBLISHED')
+        usersCount: nonQaUsers.length,
+        realUsersCount: nonQaUsers.filter((u) => originOfUser(u.id) === 'REAL').length,
+        demoUsersCount: nonQaUsers.filter((u) => originOfUser(u.id) === 'DEMO').length,
+        qaUsersCount: qaUsers.length,
+        coursesCount: nonQaCourses.length,
+        publishedCoursesCount: nonQaCourses.filter((c) => c.status === 'PUBLISHED')
           .length,
-        tasksCount: allTasks.length,
-        openTasksCount: allTasks.filter(
+        tasksCount: nonQaTasks.length,
+        openTasksCount: nonQaTasks.filter(
           (t) => t.status === 'OPEN' || t.status === 'OFFERS_RECEIVED'
         ).length,
-        bookingsCount: allBookings.length,
-        centersCount: allCenters.length,
+        bookingsCount: nonQaBookings.length,
+        centersCount: nonQaCenters.length,
         openReportsCount: allReports.filter((r) => r.status === 'OPEN').length,
         pendingVerificationsCount: allVerifications.filter(
           (v) => v.status === 'PENDING'
         ).length,
         totalVolume: Number(totalVolume.toFixed(2)),
         totalCommission: Number(totalCommission.toFixed(2)),
+        qaBreakdown: {
+          users: qaUsers.length,
+          courses: allCourses.length - nonQaCourses.length,
+          tasks: allTasks.length - nonQaTasks.length,
+          bookings: allBookings.length - nonQaBookings.length,
+          centers: allCenters.length - nonQaCenters.length,
+          payments: allPayments.length - nonQaPayments.length,
+        },
       },
       settings,
     });
@@ -85,8 +156,10 @@ router.get('/admin/overview', async (_req, res) => {
   }
 });
 
-router.get('/admin/users', async (_req, res) => {
+router.get('/admin/users', async (req, res) => {
   try {
+    const originFilter =
+      typeof req.query.origin === 'string' ? req.query.origin.toUpperCase() : '';
     const userRows = await db.select().from(users).orderBy(desc(users.createdAt));
     const roleAssignments = await db
       .select({
@@ -103,18 +176,24 @@ router.get('/admin/users', async (_req, res) => {
       map.set(ra.userId, list);
     }
 
-    res.json({
-      users: userRows.map((u) => ({
-        id: u.id,
-        email: u.email,
-        fullName: u.fullName,
-        accountStatus: u.accountStatus,
-        emailVerified: u.emailVerified,
-        isDemo: u.isDemo,
-        createdAt: u.createdAt,
-        roles: map.get(u.id) || [],
-      })),
-    });
+    const mapped = userRows.map((u) => ({
+      id: u.id,
+      email: u.email,
+      fullName: u.fullName,
+      accountStatus: u.accountStatus,
+      emailVerified: u.emailVerified,
+      isDemo: u.isDemo,
+      recordOrigin: classifyRecordOrigin(u.email, u.isDemo),
+      createdAt: u.createdAt,
+      roles: map.get(u.id) || [],
+    }));
+
+    const filtered =
+      originFilter === 'REAL' || originFilter === 'DEMO' || originFilter === 'QA_TEST'
+        ? mapped.filter((u) => u.recordOrigin === originFilter)
+        : mapped;
+
+    res.json({ users: filtered });
   } catch (error) {
     console.error('Admin users error:', error);
     res.status(500).json({ error: 'تعذر جلب المستخدمين.' });
@@ -185,13 +264,17 @@ router.put('/admin/users/:id/roles', async (req, res) => {
 
 router.get('/admin/moderation', async (_req, res) => {
   try {
-    const [providersList, centersList, reportsList, paymentsList, coursesList, tasksList] =
+    const [allUsers, providersList, centersList, reportsList, paymentsList, coursesList, tasksList] =
       await Promise.all([
+        db
+          .select({ id: users.id, email: users.email, isDemo: users.isDemo })
+          .from(users),
         db
           .select({
             userId: providerProfiles.userId,
             fullName: users.fullName,
             email: users.email,
+            isDemo: users.isDemo,
             providerType: providerProfiles.providerType,
             headline: providerProfiles.headline,
             verificationStatus: providerProfiles.verificationStatus,
@@ -205,13 +288,39 @@ router.get('/admin/moderation', async (_req, res) => {
         db.select().from(educationalTasks).orderBy(desc(educationalTasks.createdAt)),
       ]);
 
+    const userOriginMap = new Map<number, RecordOrigin>();
+    for (const u of allUsers) {
+      userOriginMap.set(u.id, classifyRecordOrigin(u.email, u.isDemo));
+    }
+    const originOfUser = (uid: number | null | undefined): RecordOrigin =>
+      uid ? userOriginMap.get(uid) ?? 'REAL' : 'REAL';
+
     res.json({
-      providers: providersList,
-      centers: centersList,
+      providers: providersList.map((p) => ({
+        ...p,
+        recordOrigin: classifyRecordOrigin(p.email, p.isDemo),
+      })),
+      centers: centersList.map((c) => ({
+        ...c,
+        recordOrigin: originOfUser(c.ownerUserId),
+      })),
       reports: reportsList,
-      payments: paymentsList,
-      courses: coursesList,
-      tasks: tasksList,
+      payments: paymentsList.map((p) => ({
+        ...p,
+        recordOrigin:
+          originOfUser(p.payerUserId) === 'QA_TEST' ||
+          originOfUser(p.payeeUserId) === 'QA_TEST'
+            ? 'QA_TEST'
+            : originOfUser(p.payerUserId),
+      })),
+      courses: coursesList.map((c) => ({
+        ...c,
+        recordOrigin: originOfUser(c.instructorUserId),
+      })),
+      tasks: tasksList.map((t) => ({
+        ...t,
+        recordOrigin: originOfUser(t.studentUserId),
+      })),
     });
   } catch (error) {
     console.error('Admin moderation error:', error);
@@ -246,16 +355,27 @@ router.patch('/admin/providers/:userId/verify', async (req: AuthRequest, res) =>
 router.patch('/admin/centers/:id/verify', async (req, res) => {
   try {
     const id = Number(req.params.id);
-    const schema = z.object({ status: z.enum(['VERIFIED', 'REJECTED', 'PENDING']) });
+    if (!Number.isInteger(id) || id <= 0) {
+      return res.status(400).json({ error: 'معرف المركز غير صالح.' });
+    }
+    const schema = z.object({
+      status: z.enum(['VERIFIED', 'REJECTED', 'PENDING', 'UNVERIFIED']),
+    });
     const parsed = schema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ error: 'الحالة غير صالحة.' });
     }
     const [updated] = await db
       .update(centers)
-      .set({ verificationStatus: parsed.data.status })
+      .set({
+        verificationStatus: parsed.data.status,
+        updatedAt: new Date(),
+      })
       .where(eq(centers.id, id))
       .returning();
+    if (!updated) {
+      return res.status(404).json({ error: 'المركز التعليمي غير موجود.' });
+    }
     res.json({ center: updated });
   } catch (error) {
     console.error('Verify center error:', error);

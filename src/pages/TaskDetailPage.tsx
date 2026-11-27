@@ -1,8 +1,11 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { CheckCircle2, Clock, AlertCircle, Star, MessageSquare } from 'lucide-react';
 import { apiFetch, TASK_STATUS_LABELS_AR } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
+import { PageHeader } from '../components/ui/PageHeader';
+import { StateBanner } from '../components/ui/StateBanner';
+import { EmptyState } from '../components/ui/EmptyState';
+import { LoadingSkeleton } from '../components/ui/LoadingSkeleton';
 
 interface TaskDetailData {
   task: {
@@ -63,7 +66,8 @@ const LIFECYCLE_STEPS = [
 
 export function TaskDetailPage() {
   const { id } = useParams();
-  const { user, openAuthModal } = useAuth();
+  const { user, openAuthModal, locale } = useAuth();
+  const isAr = locale === 'ar';
   const [data, setData] = useState<TaskDetailData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -176,19 +180,33 @@ export function TaskDetailPage() {
 
   if (loading) {
     return (
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-10">
-        <div className="h-56 bg-white border border-slate-200 rounded-xl animate-pulse" />
+      <div className="container-xxl px-3 px-sm-4 py-5">
+        <LoadingSkeleton variant="detail" count={1} />
       </div>
     );
   }
 
   if (!data) {
     return (
-      <div className="max-w-4xl mx-auto px-4 py-16 text-center space-y-3">
-        <p className="text-slate-700 font-semibold">{error || 'المهمة غير موجودة'}</p>
-        <Link to="/tasks" className="text-teal-700 text-sm underline">
-          العودة إلى سوق المهام
-        </Link>
+      <div>
+        <PageHeader
+          title={isAr ? 'المهمة غير موجودة' : 'Task Not Found'}
+          breadcrumbs={[
+            { label: isAr ? 'الرئيسية' : 'Home', to: '/' },
+            { label: isAr ? 'سوق المهام' : 'Tasks', to: '/tasks' },
+          ]}
+        />
+        <div className="container-xxl px-3 px-sm-4 py-5">
+          <EmptyState
+            icon="bi-briefcase"
+            title={error || (isAr ? 'المهمة غير موجودة' : 'Task not found')}
+            action={
+              <Link to="/tasks" className="btn-jusoor-primary px-4 py-2 text-xs">
+                {isAr ? 'العودة إلى سوق المهام' : 'Back to Tasks'}
+              </Link>
+            }
+          />
+        </div>
       </div>
     );
   }
@@ -210,403 +228,419 @@ export function TaskDetailPage() {
   const currentStepIdx = LIFECYCLE_STEPS.findIndex((s) => s.code === task.status);
 
   return (
-    <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8 space-y-8">
-      {/* Task Header Card */}
-      <div className="bg-white border border-slate-200 rounded-xl p-6 sm:p-8 space-y-5">
-        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-          <div className="space-y-2">
-            <div className="text-xs text-slate-500 flex flex-wrap items-center gap-2">
-              <span>{task.categoryNameAr}</span>
-              <span aria-hidden="true">·</span>
-              <span>{task.fieldNameAr}</span>
-              <span aria-hidden="true">·</span>
-              <span className="font-semibold text-teal-800">
-                {TASK_STATUS_LABELS_AR[task.status] || task.status}
-              </span>
+    <div>
+      <PageHeader
+        kicker={`${task.categoryNameAr} · ${task.fieldNameAr}`}
+        title={task.title}
+        subtitle={`${isAr ? 'صاحب المهمة:' : 'Student:'} ${task.studentName} · ${isAr ? 'المدة:' : 'Duration:'} ${task.expectedDuration} · ${isAr ? 'الموعد النهائي:' : 'Deadline:'} ${task.deadline}`}
+        breadcrumbs={[
+          { label: isAr ? 'الرئيسية' : 'Home', to: '/' },
+          { label: isAr ? 'سوق المهام' : 'Tasks', to: '/tasks' },
+          { label: task.title },
+        ]}
+        actions={
+          <div className="jusoor-subcard px-4 py-2.5 text-end">
+            <div className="text-[11px] text-[#64748B]">
+              {isAr ? 'الميزانية المرصودة' : 'Budget'}
             </div>
-            <h1 className="font-display text-2xl sm:text-3xl font-extrabold text-slate-900">
-              {task.title}
-            </h1>
-            <div className="text-xs text-slate-500">
-              صاحب المهمة: {task.studentName} · المدة: {task.expectedDuration} · الموعد النهائي:{' '}
-              <span className="font-mono-num">{task.deadline}</span>
-            </div>
-          </div>
-          <div className="sm:text-left shrink-0">
-            <div className="text-xs text-slate-500">الميزانية المرصودة</div>
-            <div className="font-mono-num text-2xl font-extrabold text-slate-900">
+            <div className="font-mono-num text-xl font-extrabold text-[#102A43]">
               ${task.budget}
             </div>
           </div>
-        </div>
+        }
+      />
 
-        <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-line">
-          {task.description}
-        </p>
-
-        {task.requiredSkills && (
-          <div className="text-xs text-slate-600">
-            <span className="font-semibold text-slate-800">المهارات المطلوبة: </span>
-            {task.requiredSkills}
-          </div>
+      <div className="container-xxl px-3 px-sm-4 py-4 py-md-5 space-y-5">
+        {feedback && (
+          <StateBanner
+            variant="success"
+            message={feedback}
+            onDismiss={() => setFeedback(null)}
+          />
+        )}
+        {error && (
+          <StateBanner
+            variant="error"
+            message={error}
+            onDismiss={() => setError(null)}
+          />
         )}
 
-        {/* Lifecycle Stepper */}
-        <div className="pt-4 border-t border-slate-100">
-          <div className="grid grid-cols-2 sm:grid-cols-6 gap-2">
-            {LIFECYCLE_STEPS.map((step, idx) => {
-              const passed = currentStepIdx >= idx;
-              return (
-                <div
-                  key={step.code}
-                  className={`p-2.5 rounded-lg border text-xs font-medium flex items-center gap-1.5 ${
-                    passed
-                      ? 'bg-teal-50 border-teal-200 text-teal-900'
-                      : 'bg-slate-50 border-slate-200 text-slate-500'
-                  }`}
-                >
-                  {passed ? (
-                    <CheckCircle2 className="w-3.5 h-3.5 text-teal-700 shrink-0" />
-                  ) : (
-                    <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                  )}
-                  <span className="truncate">{step.label}</span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-
-      {feedback && (
-        <div className="p-4 rounded-xl bg-teal-50 border border-teal-200 text-sm text-teal-900">
-          {feedback}
-        </div>
-      )}
-      {error && (
-        <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-sm text-red-800 flex items-center gap-2">
-          <AlertCircle className="w-4 h-4 shrink-0" />
-          <span>{error}</span>
-        </div>
-      )}
-
-      {/* Lifecycle Controls for Accepted Offer Participants */}
-      {(isOwner || isAcceptedTeacher) &&
-        ['OFFER_ACCEPTED', 'IN_PROGRESS', 'DELIVERED', 'COMPLETED'].includes(
-          task.status
-        ) && (
-          <div className="bg-white border border-slate-200 rounded-xl p-6 space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="font-display text-lg font-bold text-slate-900">
-                متابعة تنفيذ المهمة
-              </h2>
-              <Link
-                to="/messages"
-                className="text-xs font-semibold text-teal-700 flex items-center gap-1 hover:underline"
-              >
-                <MessageSquare className="w-4 h-4" />
-                <span>فتح المحادثة المباشرة</span>
-              </Link>
-            </div>
-
-            {isAcceptedTeacher && task.status === 'OFFER_ACCEPTED' && (
-              <button
-                type="button"
-                onClick={() => handleStatusChange('IN_PROGRESS')}
-                className="px-4 py-2 bg-teal-700 hover:bg-teal-800 text-white text-sm font-semibold rounded-lg cursor-pointer"
-              >
-                بدء تنفيذ المهمة (قيد التنفيذ)
-              </button>
+        {/* Task Overview & 6-Step Lifecycle Stepper */}
+        <section className="jusoor-card p-4 p-sm-5 space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="text-xs font-bold text-[#0F766E]">
+              {TASK_STATUS_LABELS_AR[task.status] || task.status}
+            </span>
+            {task.requiredSkills && (
+              <div className="text-xs text-[#64748B]">
+                <span className="font-bold text-[#102A43]">المهارات المطلوبة: </span>
+                {task.requiredSkills}
+              </div>
             )}
+          </div>
 
-            {isAcceptedTeacher && task.status === 'IN_PROGRESS' && (
-              <div className="space-y-3">
-                <textarea
-                  rows={3}
-                  value={deliverableSummary}
-                  onChange={(e) => setDeliverableSummary(e.target.value)}
-                  placeholder="ملخص المخرجات، الملاحظات، أو رابط الجلسة والملفات..."
-                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg"
-                />
-                <input
-                  type="url"
-                  value={deliverableUrl}
-                  onChange={(e) => setDeliverableUrl(e.target.value)}
-                  placeholder="رابط المخرجات (اختياري)"
-                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg"
-                />
+          <p className="text-sm text-[#172B4D] leading-relaxed whitespace-pre-line m-0">
+            {task.description}
+          </p>
+
+          <div className="pt-4 border-t border-[#DCE5F0]">
+            <div className="row g-2">
+              {LIFECYCLE_STEPS.map((step, idx) => {
+                const passed = currentStepIdx >= idx;
+                return (
+                  <div key={step.code} className="col-6 col-sm-4 col-lg-2">
+                    <div
+                      className={`p-2.5 rounded-xl border text-xs font-semibold flex items-center gap-1.5 ${
+                        passed
+                          ? 'bg-[#E8F8F5] border-[#99E2D8] text-[#0B4F4A]'
+                          : 'bg-[#F5F8FC] border-[#DCE5F0] text-[#64748B]'
+                      }`}
+                    >
+                      <i
+                        className={`bi ${
+                          passed
+                            ? 'bi-check-circle-fill text-[#0F766E]'
+                            : 'bi-clock text-[#64748B]'
+                        } shrink-0`}
+                        aria-hidden="true"
+                      />
+                      <span className="truncate">{step.label}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </section>
+
+        {/* Lifecycle Controls for Accepted Offer Participants */}
+        {(isOwner || isAcceptedTeacher) &&
+          ['OFFER_ACCEPTED', 'IN_PROGRESS', 'DELIVERED', 'COMPLETED'].includes(
+            task.status
+          ) && (
+            <section className="jusoor-card p-4 p-sm-5 space-y-4">
+              <div className="flex items-center justify-between gap-2">
+                <h2 className="font-display text-lg font-bold text-[#102A43] m-0">
+                  متابعة تنفيذ المهمة
+                </h2>
+                <Link
+                  to="/messages"
+                  className="text-xs font-semibold text-[#0F766E] inline-flex items-center gap-1.5 hover:underline"
+                >
+                  <i className="bi bi-chat-dots" aria-hidden="true" />
+                  <span>فتح المحادثة المباشرة</span>
+                </Link>
+              </div>
+
+              {isAcceptedTeacher && task.status === 'OFFER_ACCEPTED' && (
                 <button
                   type="button"
-                  onClick={() =>
-                    handleStatusChange('DELIVERED', {
-                      deliverableSummary:
-                        deliverableSummary || 'تم إتمام الشرح وتسليم المخرجات.',
-                      deliverableUrl,
-                    })
-                  }
-                  className="px-5 py-2.5 bg-teal-700 hover:bg-teal-800 text-white text-sm font-semibold rounded-lg cursor-pointer"
+                  onClick={() => handleStatusChange('IN_PROGRESS')}
+                  className="btn-jusoor-primary px-4 py-2 text-xs sm:text-sm cursor-pointer"
                 >
-                  تسليم المهمة للطالب
+                  بدء تنفيذ المهمة (قيد التنفيذ)
                 </button>
-              </div>
-            )}
+              )}
 
-            {isOwner && task.status === 'DELIVERED' && (
-              <button
-                type="button"
-                onClick={() => handleStatusChange('COMPLETED')}
-                className="px-5 py-2.5 bg-teal-700 hover:bg-teal-800 text-white text-sm font-semibold rounded-lg cursor-pointer"
-              >
-                تأكيد استلام المخرجات وإتمام المهمة
-              </button>
-            )}
-
-            {isOwner && task.status === 'COMPLETED' && (
-              <form
-                onSubmit={handleReviewSubmit}
-                className="pt-3 border-t border-slate-200 flex flex-col sm:flex-row gap-3"
-              >
-                <select
-                  value={reviewRating}
-                  onChange={(e) => setReviewRating(Number(e.target.value))}
-                  aria-label="تقييم المعلّم"
-                  className="px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white"
-                >
-                  <option value={5}>5 نجوم</option>
-                  <option value={4}>4 نجوم</option>
-                  <option value={3}>3 نجوم</option>
-                  <option value={2}>نجمتان</option>
-                  <option value={1}>نجمة واحدة</option>
-                </select>
-                <input
-                  type="text"
-                  required
-                  value={reviewComment}
-                  onChange={(e) => setReviewComment(e.target.value)}
-                  placeholder="قيّم أداء المعلّم..."
-                  className="flex-1 px-3 py-2 text-sm border border-slate-300 rounded-lg"
-                />
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold rounded-lg cursor-pointer"
-                >
-                  إرسال التقييم
-                </button>
-              </form>
-            )}
-
-            {deliverables.length > 0 && (
-              <div className="pt-3 border-t border-slate-100 space-y-2">
-                <div className="text-xs font-bold text-slate-800">
-                  المخرجات المسلّمة:
-                </div>
-                {deliverables.map((d) => (
-                  <div
-                    key={d.id}
-                    className="p-3 rounded-lg bg-slate-50 border border-slate-200 text-xs text-slate-700 space-y-1"
+              {isAcceptedTeacher && task.status === 'IN_PROGRESS' && (
+                <div className="space-y-3">
+                  <textarea
+                    rows={3}
+                    value={deliverableSummary}
+                    onChange={(e) => setDeliverableSummary(e.target.value)}
+                    placeholder="ملخص المخرجات، الملاحظات، أو رابط الجلسة والملفات..."
+                    className="jusoor-textarea w-full px-3 py-2 text-sm"
+                  />
+                  <input
+                    type="url"
+                    value={deliverableUrl}
+                    onChange={(e) => setDeliverableUrl(e.target.value)}
+                    placeholder="رابط المخرجات (اختياري)"
+                    className="jusoor-input w-full px-3 py-2 text-sm"
+                  />
+                  <button
+                    type="button"
+                    onClick={() =>
+                      handleStatusChange('DELIVERED', {
+                        deliverableSummary:
+                          deliverableSummary || 'تم إتمام الشرح وتسليم المخرجات.',
+                        deliverableUrl,
+                      })
+                    }
+                    className="btn-jusoor-primary px-4 py-2.5 text-sm cursor-pointer"
                   >
-                    <div className="font-semibold">{d.submittedByName}</div>
-                    <p>{d.summary}</p>
-                    {d.deliverableUrl && (
-                      <a
-                        href={d.deliverableUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-teal-700 underline"
-                      >
-                        فتح رابط المرفق
-                      </a>
-                    )}
+                    تسليم المهمة للطالب
+                  </button>
+                </div>
+              )}
+
+              {isOwner && task.status === 'DELIVERED' && (
+                <button
+                  type="button"
+                  onClick={() => handleStatusChange('COMPLETED')}
+                  className="btn-jusoor-primary px-4 py-2.5 text-sm cursor-pointer"
+                >
+                  تأكيد استلام المخرجات وإتمام المهمة
+                </button>
+              )}
+
+              {isOwner && task.status === 'COMPLETED' && (
+                <form
+                  onSubmit={handleReviewSubmit}
+                  className="pt-3 border-t border-[#DCE5F0] flex flex-col sm:flex-row gap-2.5"
+                >
+                  <select
+                    value={reviewRating}
+                    onChange={(e) => setReviewRating(Number(e.target.value))}
+                    aria-label="تقييم المعلّم"
+                    className="jusoor-select px-3 py-2 text-sm"
+                  >
+                    <option value={5}>5 نجوم</option>
+                    <option value={4}>4 نجوم</option>
+                    <option value={3}>3 نجوم</option>
+                    <option value={2}>نجمتان</option>
+                    <option value={1}>نجمة واحدة</option>
+                  </select>
+                  <input
+                    type="text"
+                    required
+                    value={reviewComment}
+                    onChange={(e) => setReviewComment(e.target.value)}
+                    placeholder="قيّم أداء المعلّم..."
+                    className="jusoor-input flex-1 px-3 py-2 text-sm"
+                  />
+                  <button
+                    type="submit"
+                    className="btn-jusoor-navy px-4 py-2 text-sm cursor-pointer"
+                  >
+                    إرسال التقييم
+                  </button>
+                </form>
+              )}
+
+              {deliverables.length > 0 && (
+                <div className="pt-3 border-t border-[#EDF2F7] space-y-2">
+                  <div className="text-xs font-bold text-[#102A43]">
+                    المخرجات المسلّمة:
                   </div>
-                ))}
+                  {deliverables.map((d) => (
+                    <div
+                      key={d.id}
+                      className="jusoor-subcard p-3 text-xs text-[#172B4D] space-y-1"
+                    >
+                      <div className="font-bold text-[#102A43]">{d.submittedByName}</div>
+                      <p className="m-0">{d.summary}</p>
+                      {d.deliverableUrl && (
+                        <a
+                          href={d.deliverableUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-[#0F766E] font-semibold hover:underline"
+                        >
+                          فتح رابط المرفق
+                        </a>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
+
+        {/* Teacher Offer Submission Form */}
+        {canOffer && (
+          <section className="jusoor-card p-4 p-sm-5 space-y-4">
+            <h2 className="font-display text-lg font-bold text-[#102A43] m-0">
+              تقديم عرض تعليمي على هذه المهمة
+            </h2>
+            <form onSubmit={handleSubmitOffer} className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-[#172B4D] mb-1">
+                  خطة الشرح وتفاصيل العرض
+                </label>
+                <textarea
+                  required
+                  rows={3}
+                  value={proposal}
+                  onChange={(e) => setProposal(e.target.value)}
+                  placeholder="اشرح كيف ستساعد الطالب وما الذي سيحصل عليه..."
+                  className="jusoor-textarea w-full px-3 py-2 text-sm"
+                />
               </div>
-            )}
+              <div className="row g-3">
+                <div className="col-12 col-sm-4">
+                  <label className="block text-xs font-semibold text-[#172B4D] mb-1">
+                    السعر المقترح (USD)
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    min="5"
+                    value={proposedPrice}
+                    onChange={(e) => setProposedPrice(e.target.value)}
+                    className="jusoor-input w-full px-3 py-2 text-sm font-mono-num"
+                  />
+                </div>
+                <div className="col-12 col-sm-4">
+                  <label className="block text-xs font-semibold text-[#172B4D] mb-1">
+                    المدة المتوقعة
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={offerDuration}
+                    onChange={(e) => setOfferDuration(e.target.value)}
+                    className="jusoor-input w-full px-3 py-2 text-sm"
+                  />
+                </div>
+                <div className="col-12 col-sm-4">
+                  <label className="block text-xs font-semibold text-[#172B4D] mb-1">
+                    ملاحظات إضافية
+                  </label>
+                  <input
+                    type="text"
+                    value={additionalNotes}
+                    onChange={(e) => setAdditionalNotes(e.target.value)}
+                    className="jusoor-input w-full px-3 py-2 text-sm"
+                  />
+                </div>
+              </div>
+              <button
+                type="submit"
+                className="btn-jusoor-primary px-5 py-2.5 text-sm cursor-pointer"
+              >
+                إرسال العرض
+              </button>
+            </form>
+          </section>
+        )}
+
+        {!user && (task.status === 'OPEN' || task.status === 'OFFERS_RECEIVED') && (
+          <div className="jusoor-card p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <span className="text-sm text-[#172B4D]">
+              هل أنت معلّم أو مرشد وترغب في تقديم عرض على هذه المهمة؟
+            </span>
+            <button
+              type="button"
+              onClick={openAuthModal}
+              className="btn-jusoor-navy px-4 py-2 text-xs cursor-pointer whitespace-nowrap"
+            >
+              سجّل الدخول لتقديم عرض
+            </button>
           </div>
         )}
 
-      {/* Teacher Offer Submission Form */}
-      {canOffer && (
-        <div className="bg-white border border-slate-200 rounded-xl p-6 space-y-4">
-          <h2 className="font-display text-lg font-bold text-slate-900">
-            تقديم عرض تعليمي على هذه المهمة
+        {/* Offers Comparison List */}
+        <section className="jusoor-card p-4 p-sm-5 space-y-4">
+          <h2 className="font-display text-lg font-bold text-[#102A43] m-0">
+            العروض المقدّمة ({offers.length})
           </h2>
-          <form onSubmit={handleSubmitOffer} className="space-y-3">
-            <div>
-              <label className="block text-xs font-medium text-slate-700 mb-1">
-                خطة الشرح وتفاصيل العرض
-              </label>
-              <textarea
-                required
-                rows={3}
-                value={proposal}
-                onChange={(e) => setProposal(e.target.value)}
-                placeholder="اشرح كيف ستساعد الطالب وما الذي سيحصل عليه..."
-                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg"
-              />
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">
-                  السعر المقترح (USD)
-                </label>
-                <input
-                  type="number"
-                  required
-                  min="5"
-                  value={proposedPrice}
-                  onChange={(e) => setProposedPrice(e.target.value)}
-                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg font-mono-num"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">
-                  المدة المتوقعة
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={offerDuration}
-                  onChange={(e) => setOfferDuration(e.target.value)}
-                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">
-                  ملاحظات إضافية
-                </label>
-                <input
-                  type="text"
-                  value={additionalNotes}
-                  onChange={(e) => setAdditionalNotes(e.target.value)}
-                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg"
-                />
-              </div>
-            </div>
-            <button
-              type="submit"
-              className="px-5 py-2.5 bg-teal-700 hover:bg-teal-800 text-white text-sm font-semibold rounded-lg cursor-pointer"
-            >
-              إرسال العرض
-            </button>
-          </form>
-        </div>
-      )}
 
-      {!user && (task.status === 'OPEN' || task.status === 'OFFERS_RECEIVED') && (
-        <div className="bg-white border border-slate-200 rounded-xl p-5 flex items-center justify-between gap-4">
-          <span className="text-sm text-slate-700">
-            هل أنت معلّم أو مرشد وترغب في تقديم عرض على هذه المهمة؟
-          </span>
-          <button
-            type="button"
-            onClick={openAuthModal}
-            className="px-4 py-2 bg-slate-900 text-white text-xs font-semibold rounded-lg cursor-pointer whitespace-nowrap"
-          >
-            سجّل الدخول لتقديم عرض
-          </button>
-        </div>
-      )}
-
-      {/* Offers Comparison List */}
-      <div className="bg-white border border-slate-200 rounded-xl p-6 space-y-4">
-        <h2 className="font-display text-lg font-bold text-slate-900">
-          العروض المقدّمة ({offers.length})
-        </h2>
-
-        {offers.length === 0 ? (
-          <p className="text-sm text-slate-500">
-            لم تُقدّم عروض بعد على هذه المهمة.
-          </p>
-        ) : (
-          <div className="divide-y divide-slate-200">
-            {offers.map((offer) => (
-              <div
-                key={offer.id}
-                className="py-4 first:pt-0 last:pb-0 flex flex-col md:flex-row md:items-start justify-between gap-4"
-              >
-                <div className="space-y-1.5 flex-1">
-                  <div className="flex flex-wrap items-center gap-2 text-sm">
-                    <span className="font-bold text-slate-900">
-                      {offer.teacherName}
-                    </span>
-                    {offer.providerVerified === 'VERIFIED' && (
-                      <span className="text-xs text-teal-700 font-medium">
-                        · موثّق
-                      </span>
-                    )}
-                    {offer.providerRating && (
-                      <span className="text-xs text-amber-600 flex items-center gap-0.5 font-mono-num">
-                        <Star className="w-3.5 h-3.5 fill-amber-500" />
-                        {offer.providerRating}
-                      </span>
-                    )}
-                    <span className="text-xs text-slate-500">
-                      · حالة العرض: {offer.status === 'ACCEPTED' ? 'مقبول' : offer.status === 'REJECTED' ? 'مرفوض' : 'قيد الانتظار'}
-                    </span>
-                  </div>
-                  {offer.providerHeadline && (
-                    <div className="text-xs text-slate-500">
-                      {offer.providerHeadline}
-                    </div>
-                  )}
-                  <p className="text-sm text-slate-700 leading-relaxed pt-1">
-                    {offer.proposal}
-                  </p>
-                  <div className="text-xs text-slate-500">
-                    المدة المقترحة: {offer.expectedDuration}
-                    {offer.additionalNotes && ` · ${offer.additionalNotes}`}
-                  </div>
-                </div>
-
-                <div className="flex md:flex-col items-center md:items-end justify-between gap-3 shrink-0">
-                  <div className="font-mono-num text-lg font-extrabold text-slate-900">
-                    ${offer.proposedPrice}
-                  </div>
-                  {isOwner &&
-                    offer.status === 'PENDING' &&
-                    (task.status === 'OPEN' ||
-                      task.status === 'OFFERS_RECEIVED') && (
-                      <button
-                        type="button"
-                        onClick={() => handleAcceptOffer(offer.id)}
-                        className="px-4 py-2 bg-teal-700 hover:bg-teal-800 text-white text-xs font-semibold rounded-lg cursor-pointer whitespace-nowrap"
+          {offers.length === 0 ? (
+            <p className="text-sm text-[#64748B] m-0">
+              لم تُقدّم عروض بعد على هذه المهمة.
+            </p>
+          ) : (
+            <div className="divide-y divide-[#DCE5F0]">
+              {offers.map((offer) => (
+                <div
+                  key={offer.id}
+                  className="py-4 first:pt-0 last:pb-0 flex flex-col md:flex-row md:items-start justify-between gap-4"
+                >
+                  <div className="space-y-1.5 flex-1">
+                    <div className="flex flex-wrap items-center gap-2 text-sm">
+                      <Link
+                        to={`/instructors/${offer.teacherUserId}`}
+                        className="font-bold text-[#102A43] hover:text-[#247BA0]"
                       >
-                        قبول هذا العرض
-                      </button>
+                        {offer.teacherName}
+                      </Link>
+                      {offer.providerVerified === 'VERIFIED' && (
+                        <span className="text-xs text-[#0F766E] font-semibold inline-flex items-center gap-1">
+                          <i className="bi bi-patch-check-fill text-[#20B8A6]" aria-hidden="true" />
+                          موثّق
+                        </span>
+                      )}
+                      {offer.providerRating && (
+                        <span className="text-xs text-[#B45309] inline-flex items-center gap-1 font-mono-num">
+                          <i className="bi bi-star-fill text-[#F59E0B]" aria-hidden="true" />
+                          {offer.providerRating}
+                        </span>
+                      )}
+                      <span className="text-xs text-[#64748B]">
+                        ·{' '}
+                        {offer.status === 'ACCEPTED'
+                          ? 'مقبول'
+                          : offer.status === 'REJECTED'
+                          ? 'مرفوض'
+                          : 'قيد الانتظار'}
+                      </span>
+                    </div>
+                    {offer.providerHeadline && (
+                      <div className="text-xs text-[#64748B]">
+                        {offer.providerHeadline}
+                      </div>
                     )}
+                    <p className="text-sm text-[#172B4D] leading-relaxed pt-1 m-0">
+                      {offer.proposal}
+                    </p>
+                    <div className="text-xs text-[#64748B]">
+                      المدة المقترحة: {offer.expectedDuration}
+                      {offer.additionalNotes && ` · ${offer.additionalNotes}`}
+                    </div>
+                  </div>
+
+                  <div className="flex md:flex-col items-center md:items-end justify-between gap-3 shrink-0">
+                    <div className="font-mono-num text-lg font-extrabold text-[#102A43]">
+                      ${offer.proposedPrice}
+                    </div>
+                    {isOwner &&
+                      offer.status === 'PENDING' &&
+                      (task.status === 'OPEN' ||
+                        task.status === 'OFFERS_RECEIVED') && (
+                        <button
+                          type="button"
+                          onClick={() => handleAcceptOffer(offer.id)}
+                          className="btn-jusoor-primary px-4 py-2 text-xs cursor-pointer whitespace-nowrap"
+                        >
+                          قبول هذا العرض
+                        </button>
+                      )}
+                  </div>
                 </div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        {/* Status History */}
+        <section className="jusoor-card p-4 p-sm-5 space-y-3">
+          <h3 className="font-display text-base font-bold text-[#102A43] m-0">
+            سجل تغيّرات المهمة
+          </h3>
+          <div className="divide-y divide-[#EDF2F7] text-xs">
+            {history.map((h) => (
+              <div
+                key={h.id}
+                className="py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-1"
+              >
+                <div className="text-[#172B4D]">
+                  <span className="font-bold text-[#102A43]">{h.changedByName}</span>:{' '}
+                  <span>
+                    {h.note ||
+                      `${TASK_STATUS_LABELS_AR[h.fromStatus] || h.fromStatus} ← ${
+                        TASK_STATUS_LABELS_AR[h.toStatus] || h.toStatus
+                      }`}
+                  </span>
+                </div>
+                <span className="font-mono-num text-[#64748B]">
+                  {new Date(h.createdAt).toLocaleString('ar-EG')}
+                </span>
               </div>
             ))}
           </div>
-        )}
-      </div>
-
-      {/* Status History */}
-      <div className="bg-white border border-slate-200 rounded-xl p-6 space-y-3">
-        <h3 className="font-display text-base font-bold text-slate-900">
-          سجل تغيّرات المهمة
-        </h3>
-        <div className="divide-y divide-slate-100 text-xs">
-          {history.map((h) => (
-            <div
-              key={h.id}
-              className="py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-1"
-            >
-              <div className="text-slate-700">
-                <span className="font-semibold">{h.changedByName}</span>:{' '}
-                <span>
-                  {h.note ||
-                    `${TASK_STATUS_LABELS_AR[h.fromStatus] || h.fromStatus} ← ${
-                      TASK_STATUS_LABELS_AR[h.toStatus] || h.toStatus
-                    }`}
-                </span>
-              </div>
-              <span className="font-mono-num text-slate-400">
-                {new Date(h.createdAt).toLocaleString('ar-EG')}
-              </span>
-            </div>
-          ))}
-        </div>
+        </section>
       </div>
     </div>
   );

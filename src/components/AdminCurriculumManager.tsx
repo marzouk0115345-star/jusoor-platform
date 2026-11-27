@@ -1,16 +1,8 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import {
-  BookOpen,
-  Copy,
-  CheckCircle2,
-  AlertCircle,
-  Layers,
-  Plus,
-  Trash2,
-  Users,
-  Calendar,
-} from 'lucide-react';
 import { apiFetch, LANGUAGE_OF_INSTRUCTION_LABELS } from '../lib/api';
+import { StateBanner } from './ui/StateBanner';
+import { LoadingSkeleton } from './ui/LoadingSkeleton';
+import { EmptyState } from './ui/EmptyState';
 
 interface AdminCurriculumPayload {
   academicYears: Array<{
@@ -118,12 +110,10 @@ export function AdminCurriculumManager() {
   const [feedback, setFeedback] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Forms: New Academic Year
   const [newYearCode, setNewYearCode] = useState('');
   const [newYearNameAr, setNewYearNameAr] = useState('');
   const [newYearNameEn, setNewYearNameEn] = useState('');
 
-  // Forms: Copy Version
   const [copySourceVersionId, setCopySourceVersionId] = useState<number | ''>('');
   const [copyTargetYearId, setCopyTargetYearId] = useState<number | ''>('');
   const [copyVersionCode, setCopyVersionCode] = useState('');
@@ -131,12 +121,10 @@ export function AdminCurriculumManager() {
   const [copyNameEn, setCopyNameEn] = useState('');
   const [copyActivate, setCopyActivate] = useState(false);
 
-  // Forms: New Master Subject
   const [newMasterSubjFieldId, setNewMasterSubjFieldId] = useState<number | ''>('');
   const [newMasterSubjAr, setNewMasterSubjAr] = useState('');
   const [newMasterSubjEn, setNewMasterSubjEn] = useState('');
 
-  // Forms: Attach Subject to Grade/Curriculum Version
   const [csGradeId, setCsGradeId] = useState<number | ''>('');
   const [csDivisionId, setCsDivisionId] = useState<number | ''>('');
   const [csPathwayId, setCsPathwayId] = useState<number | ''>('');
@@ -151,7 +139,6 @@ export function AdminCurriculumManager() {
   const [csAssignable, setCsAssignable] = useState(true);
   const [csPassThreshold, setCsPassThreshold] = useState('');
 
-  // Forms: Assign Teacher
   const [assignTeacherId, setAssignTeacherId] = useState<number | ''>('');
   const [assignCurrSubjectId, setAssignCurrSubjectId] = useState<number | ''>('');
   const [assignRate, setAssignRate] = useState('35');
@@ -401,7 +388,9 @@ export function AdminCurriculumManager() {
 
   if (loading && !data) {
     return (
-      <div className="bg-white border border-slate-200 rounded-xl p-6 h-48 animate-pulse" />
+      <div className="jusoor-card p-5">
+        <LoadingSkeleton variant="list" count={4} />
+      </div>
     );
   }
 
@@ -424,21 +413,21 @@ export function AdminCurriculumManager() {
 
   return (
     <section
-      className="bg-white border border-slate-200 rounded-xl p-6 space-y-6"
+      className="jusoor-card p-4 sm:p-6 space-y-5"
       data-testid="admin-curriculum-manager"
     >
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
-          <h2 className="font-display text-xl font-bold text-slate-900 flex items-center gap-2">
-            <Layers className="w-5 h-5 text-teal-700" />
+          <h2 className="font-display text-lg sm:text-xl font-bold text-[#102A43] flex items-center gap-2 m-0">
+            <i className="bi bi-layers text-[#0F766E]" aria-hidden="true" />
             <span>إدارة المراحل التعليمية والمناهج الدراسية</span>
           </h2>
-          <p className="text-xs sm:text-sm text-slate-600 mt-1">
+          <p className="text-xs sm:text-sm text-[#64748B] mt-1 mb-0">
             إدارة السنوات الدراسية، نسخ المناهج واستنساخها، الصفوف والشعب والمسارات، المواد وتصنيفاتها، وتعيين المعلّمين.
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-1 p-1 bg-slate-100 rounded-lg">
+        <div className="jusoor-tabs flex flex-wrap items-center gap-1">
           {[
             { code: 'VERSIONS' as const, label: 'السنوات والنسخ' },
             { code: 'SUBJECTS' as const, label: 'مواد المنهج والتصنيفات' },
@@ -449,10 +438,8 @@ export function AdminCurriculumManager() {
               key={tab.code}
               type="button"
               onClick={() => setActiveSubTab(tab.code)}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-md cursor-pointer ${
-                activeSubTab === tab.code
-                  ? 'bg-white text-slate-900 shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
+              className={`jusoor-tab-btn px-3 py-1.5 text-xs cursor-pointer whitespace-nowrap ${
+                activeSubTab === tab.code ? 'is-active' : ''
               }`}
             >
               {tab.label}
@@ -462,197 +449,215 @@ export function AdminCurriculumManager() {
       </div>
 
       {feedback && (
-        <div className="p-3.5 rounded-lg bg-teal-50 border border-teal-200 text-xs sm:text-sm text-teal-900 flex items-center gap-2">
-          <CheckCircle2 className="w-4 h-4 text-teal-700 shrink-0" />
-          <span>{feedback}</span>
-        </div>
+        <StateBanner variant="success" message={feedback} onDismiss={() => setFeedback(null)} />
       )}
       {error && (
-        <div className="p-3.5 rounded-lg bg-red-50 border border-red-200 text-xs sm:text-sm text-red-800 flex items-center gap-2">
-          <AlertCircle className="w-4 h-4 shrink-0" />
-          <span>{error}</span>
-        </div>
+        <StateBanner variant="error" message={error} onDismiss={() => setError(null)} />
       )}
 
-      {/* Sub-tab 1: Academic Years & Curriculum Versions (including Copy) */}
+      {/* Sub-tab 1: Academic Years & Curriculum Versions */}
       {activeSubTab === 'VERSIONS' && (
-        <div className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <form
-              onSubmit={handleCreateYear}
-              className="border border-slate-200 rounded-xl p-5 space-y-3 bg-slate-50/60"
-            >
-              <div className="font-display text-sm font-bold text-slate-900 flex items-center gap-1.5">
-                <Calendar className="w-4 h-4 text-teal-700" />
-                <span>إضافة عام دراسي جديد</span>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                <input
-                  type="text"
-                  required
-                  placeholder="الرمز (مثال: 2027/2028)"
-                  value={newYearCode}
-                  onChange={(e) => setNewYearCode(e.target.value)}
-                  className="px-3 py-2 text-xs border border-slate-300 rounded-lg bg-white font-mono-num"
-                />
-                <input
-                  type="text"
-                  required
-                  placeholder="الاسم بالعربية"
-                  value={newYearNameAr}
-                  onChange={(e) => setNewYearNameAr(e.target.value)}
-                  className="px-3 py-2 text-xs border border-slate-300 rounded-lg bg-white"
-                />
-                <input
-                  type="text"
-                  required
-                  placeholder="الاسم بالإنجليزية"
-                  value={newYearNameEn}
-                  onChange={(e) => setNewYearNameEn(e.target.value)}
-                  className="px-3 py-2 text-xs border border-slate-300 rounded-lg bg-white"
-                />
-              </div>
-              <button
-                type="submit"
-                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-lg cursor-pointer"
+        <div className="space-y-5">
+          <div className="row g-4">
+            <div className="col-12 col-lg-6">
+              <form
+                onSubmit={handleCreateYear}
+                className="jusoor-subcard p-4 space-y-3 h-full"
               >
-                إضافة العام الدراسي
-              </button>
-            </form>
+                <div className="font-display text-sm font-bold text-[#102A43] flex items-center gap-1.5">
+                  <i className="bi bi-calendar-plus text-[#0F766E]" aria-hidden="true" />
+                  <span>إضافة عام دراسي جديد</span>
+                </div>
+                <div className="row g-2">
+                  <div className="col-12 col-sm-4">
+                    <input
+                      type="text"
+                      required
+                      placeholder="الرمز (مثال: 2027/2028)"
+                      value={newYearCode}
+                      onChange={(e) => setNewYearCode(e.target.value)}
+                      className="jusoor-input w-full px-3 py-2 text-xs font-mono-num"
+                    />
+                  </div>
+                  <div className="col-12 col-sm-4">
+                    <input
+                      type="text"
+                      required
+                      placeholder="الاسم بالعربية"
+                      value={newYearNameAr}
+                      onChange={(e) => setNewYearNameAr(e.target.value)}
+                      className="jusoor-input w-full px-3 py-2 text-xs"
+                    />
+                  </div>
+                  <div className="col-12 col-sm-4">
+                    <input
+                      type="text"
+                      required
+                      placeholder="الاسم بالإنجليزية"
+                      value={newYearNameEn}
+                      onChange={(e) => setNewYearNameEn(e.target.value)}
+                      className="jusoor-input w-full px-3 py-2 text-xs"
+                    />
+                  </div>
+                </div>
+                <button
+                  type="submit"
+                  className="btn-jusoor-navy px-4 py-2 text-xs cursor-pointer"
+                >
+                  إضافة العام الدراسي
+                </button>
+              </form>
+            </div>
 
-            <form
-              onSubmit={handleCopyVersion}
-              className="border border-slate-200 rounded-xl p-5 space-y-3 bg-slate-50/60"
-              data-testid="copy-curriculum-version-form"
-            >
-              <div className="font-display text-sm font-bold text-slate-900 flex items-center gap-1.5">
-                <Copy className="w-4 h-4 text-teal-700" />
-                <span>نسخ نسخة منهج لعام جديد أو تحديث</span>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                <select
-                  value={copySourceVersionId}
-                  onChange={(e) =>
-                    setCopySourceVersionId(
-                      e.target.value ? Number(e.target.value) : ''
-                    )
-                  }
-                  className="px-3 py-2 text-xs border border-slate-300 rounded-lg bg-white"
-                >
-                  {data.versions.map((v) => (
-                    <option key={v.id} value={v.id}>
-                      المصدر: {v.nameAr} ({v.versionCode})
-                    </option>
-                  ))}
-                </select>
-                <select
-                  value={copyTargetYearId}
-                  onChange={(e) =>
-                    setCopyTargetYearId(
-                      e.target.value ? Number(e.target.value) : ''
-                    )
-                  }
-                  className="px-3 py-2 text-xs border border-slate-300 rounded-lg bg-white"
-                >
-                  {data.academicYears.map((y) => (
-                    <option key={y.id} value={y.id}>
-                      العام المستهدف: {y.nameAr}
-                    </option>
-                  ))}
-                </select>
-                <input
-                  type="text"
-                  required
-                  placeholder="كود النسخة الجديدة (EG-2027-2028-V1)"
-                  value={copyVersionCode}
-                  onChange={(e) => setCopyVersionCode(e.target.value)}
-                  className="px-3 py-2 text-xs border border-slate-300 rounded-lg bg-white font-mono-num"
-                />
-                <input
-                  type="text"
-                  required
-                  placeholder="اسم النسخة بالعربية"
-                  value={copyNameAr}
-                  onChange={(e) => setCopyNameAr(e.target.value)}
-                  className="px-3 py-2 text-xs border border-slate-300 rounded-lg bg-white"
-                />
-                <input
-                  type="text"
-                  required
-                  placeholder="اسم النسخة بالإنجليزية"
-                  value={copyNameEn}
-                  onChange={(e) => setCopyNameEn(e.target.value)}
-                  className="px-3 py-2 text-xs border border-slate-300 rounded-lg bg-white"
-                />
-                <label className="flex items-center gap-2 text-xs text-slate-700 px-1 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={copyActivate}
-                    onChange={(e) => setCopyActivate(e.target.checked)}
-                  />
-                  <span>تفعيل النسخة الجديدة فوراً</span>
-                </label>
-              </div>
-              <button
-                type="submit"
-                className="px-4 py-2 bg-teal-700 hover:bg-teal-800 text-white text-xs font-semibold rounded-lg cursor-pointer"
+            <div className="col-12 col-lg-6">
+              <form
+                onSubmit={handleCopyVersion}
+                className="jusoor-subcard p-4 space-y-3 h-full"
+                data-testid="copy-curriculum-version-form"
               >
-                استنساخ كافة المواد إلى النسخة الجديدة
-              </button>
-            </form>
+                <div className="font-display text-sm font-bold text-[#102A43] flex items-center gap-1.5">
+                  <i className="bi bi-copy text-[#0F766E]" aria-hidden="true" />
+                  <span>نسخ نسخة منهج لعام جديد أو تحديث</span>
+                </div>
+                <div className="row g-2">
+                  <div className="col-12 col-sm-6">
+                    <select
+                      value={copySourceVersionId}
+                      onChange={(e) =>
+                        setCopySourceVersionId(
+                          e.target.value ? Number(e.target.value) : ''
+                        )
+                      }
+                      className="jusoor-select w-full px-3 py-2 text-xs"
+                    >
+                      {data.versions.map((v) => (
+                        <option key={v.id} value={v.id}>
+                          المصدر: {v.nameAr} ({v.versionCode})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="col-12 col-sm-6">
+                    <select
+                      value={copyTargetYearId}
+                      onChange={(e) =>
+                        setCopyTargetYearId(
+                          e.target.value ? Number(e.target.value) : ''
+                        )
+                      }
+                      className="jusoor-select w-full px-3 py-2 text-xs"
+                    >
+                      {data.academicYears.map((y) => (
+                        <option key={y.id} value={y.id}>
+                          العام المستهدف: {y.nameAr}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="col-12 col-sm-6">
+                    <input
+                      type="text"
+                      required
+                      placeholder="كود النسخة الجديدة (EG-2027-2028-V1)"
+                      value={copyVersionCode}
+                      onChange={(e) => setCopyVersionCode(e.target.value)}
+                      className="jusoor-input w-full px-3 py-2 text-xs font-mono-num"
+                    />
+                  </div>
+                  <div className="col-12 col-sm-6">
+                    <input
+                      type="text"
+                      required
+                      placeholder="اسم النسخة بالعربية"
+                      value={copyNameAr}
+                      onChange={(e) => setCopyNameAr(e.target.value)}
+                      className="jusoor-input w-full px-3 py-2 text-xs"
+                    />
+                  </div>
+                  <div className="col-12 col-sm-6">
+                    <input
+                      type="text"
+                      required
+                      placeholder="اسم النسخة بالإنجليزية"
+                      value={copyNameEn}
+                      onChange={(e) => setCopyNameEn(e.target.value)}
+                      className="jusoor-input w-full px-3 py-2 text-xs"
+                    />
+                  </div>
+                  <div className="col-12 col-sm-6 flex items-center">
+                    <label className="flex items-center gap-2 text-xs text-[#172B4D] px-1 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={copyActivate}
+                        onChange={(e) => setCopyActivate(e.target.checked)}
+                      />
+                      <span>تفعيل النسخة الجديدة فوراً</span>
+                    </label>
+                  </div>
+                </div>
+                <button
+                  type="submit"
+                  className="btn-jusoor-primary px-4 py-2 text-xs cursor-pointer"
+                >
+                  استنساخ كافة المواد إلى النسخة الجديدة
+                </button>
+              </form>
+            </div>
           </div>
 
-          <div className="overflow-x-auto border border-slate-200 rounded-xl">
-            <table className="w-full text-right text-xs">
-              <thead className="bg-slate-50 border-b border-slate-200 text-slate-500">
+          <div className="table-responsive border border-[#DCE5F0] rounded-xl">
+            <table className="table table-jusoor table-hover text-xs">
+              <thead>
                 <tr>
-                  <th className="py-2.5 px-3">الكود</th>
-                  <th className="py-2.5 px-3">النسخة</th>
-                  <th className="py-2.5 px-3">العام الدراسي</th>
-                  <th className="py-2.5 px-3">الحالة</th>
-                  <th className="py-2.5 px-3">إجراء</th>
+                  <th>الكود</th>
+                  <th>النسخة</th>
+                  <th>العام الدراسي</th>
+                  <th>الحالة</th>
+                  <th>إجراء</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody>
                 {data.versions.map((v) => {
                   const yr = data.academicYears.find((y) => y.id === v.academicYearId);
                   return (
                     <tr key={v.id}>
-                      <td className="py-2.5 px-3 font-mono-num font-bold text-slate-900">
+                      <td className="font-mono-num font-bold text-[#102A43]">
                         {v.versionCode}
                       </td>
-                      <td className="py-2.5 px-3">
-                        <div className="font-semibold text-slate-900">{v.nameAr}</div>
-                        <div className="text-[11px] text-slate-500">{v.nameEn}</div>
+                      <td>
+                        <div className="font-semibold text-[#102A43]">{v.nameAr}</div>
+                        <div className="text-[11px] text-[#64748B]">{v.nameEn}</div>
                       </td>
-                      <td className="py-2.5 px-3">{yr?.nameAr || v.academicYearId}</td>
-                      <td className="py-2.5 px-3 font-semibold">
+                      <td>{yr?.nameAr || v.academicYearId}</td>
+                      <td className="font-semibold">
                         {v.isActive ? (
-                          <span className="text-teal-700">مفعّلة الآن</span>
+                          <span className="text-[#0F766E]">مفعّلة الآن</span>
                         ) : (
-                          <span className="text-slate-500">مؤرشفة</span>
+                          <span className="text-[#64748B]">مؤرشفة</span>
                         )}
                       </td>
-                      <td className="py-2.5 px-3 flex items-center gap-3">
-                        {!v.isActive && (
+                      <td>
+                        <div className="flex items-center gap-3">
+                          {!v.isActive && (
+                            <button
+                              type="button"
+                              onClick={() => handleToggleVersionActive(v.id, true)}
+                              className="text-[#0F766E] hover:underline font-semibold cursor-pointer"
+                            >
+                              تفعيل
+                            </button>
+                          )}
                           <button
                             type="button"
-                            onClick={() => handleToggleVersionActive(v.id, true)}
-                            className="text-teal-700 hover:underline font-semibold cursor-pointer"
+                            onClick={() => {
+                              setSelectedVersionId(v.id);
+                              setActiveSubTab('SUBJECTS');
+                            }}
+                            className="text-[#247BA0] hover:underline font-semibold cursor-pointer"
                           >
-                            تفعيل
+                            عرض موادها
                           </button>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSelectedVersionId(v.id);
-                            setActiveSubTab('SUBJECTS');
-                          }}
-                          className="text-slate-700 hover:underline cursor-pointer"
-                        >
-                          عرض موادها
-                        </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -665,213 +670,235 @@ export function AdminCurriculumManager() {
 
       {/* Sub-tab 2: Curriculum Subjects Matrix */}
       {activeSubTab === 'SUBJECTS' && (
-        <div className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <form
-              onSubmit={handleCreateMasterSubject}
-              className="border border-slate-200 rounded-xl p-5 space-y-3 bg-slate-50/60"
-            >
-              <div className="font-display text-sm font-bold text-slate-900 flex items-center gap-1.5">
-                <BookOpen className="w-4 h-4 text-teal-700" />
-                <span>إنشاء مادة دراسية أساسية جديدة</span>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                <select
-                  value={newMasterSubjFieldId}
-                  onChange={(e) => setNewMasterSubjFieldId(Number(e.target.value))}
-                  className="px-3 py-2 text-xs border border-slate-300 rounded-lg bg-white"
-                >
-                  {data.fields.map((f) => (
-                    <option key={f.id} value={f.id}>
-                      {f.nameAr}
-                    </option>
-                  ))}
-                </select>
-                <input
-                  type="text"
-                  required
-                  placeholder="اسم المادة بالعربية"
-                  value={newMasterSubjAr}
-                  onChange={(e) => setNewMasterSubjAr(e.target.value)}
-                  className="px-3 py-2 text-xs border border-slate-300 rounded-lg bg-white"
-                />
-                <input
-                  type="text"
-                  required
-                  placeholder="Subject Name (EN)"
-                  value={newMasterSubjEn}
-                  onChange={(e) => setNewMasterSubjEn(e.target.value)}
-                  className="px-3 py-2 text-xs border border-slate-300 rounded-lg bg-white"
-                />
-              </div>
-              <button
-                type="submit"
-                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-lg cursor-pointer"
+        <div className="space-y-5">
+          <div className="row g-4">
+            <div className="col-12 col-lg-6">
+              <form
+                onSubmit={handleCreateMasterSubject}
+                className="jusoor-subcard p-4 space-y-3 h-full"
               >
-                إضافة للدليل الرئيسي
-              </button>
-            </form>
-
-            <form
-              onSubmit={handleAddCurriculumSubject}
-              className="border border-slate-200 rounded-xl p-5 space-y-3 bg-slate-50/60"
-            >
-              <div className="font-display text-sm font-bold text-slate-900 flex items-center gap-1.5">
-                <Plus className="w-4 h-4 text-teal-700" />
-                <span>إضافة مادة لصف/شعبة/مسار في النسخة المحددة</span>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                <select
-                  value={csGradeId}
-                  onChange={(e) => {
-                    setCsGradeId(Number(e.target.value));
-                    setCsDivisionId('');
-                    setCsPathwayId('');
-                  }}
-                  className="px-3 py-2 text-xs border border-slate-300 rounded-lg bg-white"
+                <div className="font-display text-sm font-bold text-[#102A43] flex items-center gap-1.5">
+                  <i className="bi bi-book text-[#0F766E]" aria-hidden="true" />
+                  <span>إنشاء مادة دراسية أساسية جديدة</span>
+                </div>
+                <div className="row g-2">
+                  <div className="col-12 col-sm-4">
+                    <select
+                      value={newMasterSubjFieldId}
+                      onChange={(e) => setNewMasterSubjFieldId(Number(e.target.value))}
+                      className="jusoor-select w-full px-3 py-2 text-xs"
+                    >
+                      {data.fields.map((f) => (
+                        <option key={f.id} value={f.id}>
+                          {f.nameAr}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="col-12 col-sm-4">
+                    <input
+                      type="text"
+                      required
+                      placeholder="اسم المادة بالعربية"
+                      value={newMasterSubjAr}
+                      onChange={(e) => setNewMasterSubjAr(e.target.value)}
+                      className="jusoor-input w-full px-3 py-2 text-xs"
+                    />
+                  </div>
+                  <div className="col-12 col-sm-4">
+                    <input
+                      type="text"
+                      required
+                      placeholder="Subject Name (EN)"
+                      value={newMasterSubjEn}
+                      onChange={(e) => setNewMasterSubjEn(e.target.value)}
+                      className="jusoor-input w-full px-3 py-2 text-xs"
+                    />
+                  </div>
+                </div>
+                <button
+                  type="submit"
+                  className="btn-jusoor-navy px-4 py-2 text-xs cursor-pointer"
                 >
-                  {data.grades.map((g) => (
-                    <option key={g.id} value={g.id}>
-                      {g.nameAr}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  value={csSubjectId}
-                  onChange={(e) => setCsSubjectId(Number(e.target.value))}
-                  className="px-3 py-2 text-xs border border-slate-300 rounded-lg bg-white"
-                >
-                  {data.masterSubjects.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.nameAr}
-                    </option>
-                  ))}
-                </select>
+                  إضافة للدليل الرئيسي
+                </button>
+              </form>
+            </div>
 
-                {csDivisionOptions.length > 0 && (
-                  <select
-                    value={csDivisionId}
-                    onChange={(e) =>
-                      setCsDivisionId(e.target.value ? Number(e.target.value) : '')
-                    }
-                    className="px-3 py-2 text-xs border border-slate-300 rounded-lg bg-white"
-                  >
-                    <option value="">اختر الشعبة...</option>
-                    {csDivisionOptions.map((d) => (
-                      <option key={d.id} value={d.id}>
-                        {d.nameAr}
-                      </option>
-                    ))}
-                  </select>
-                )}
-
-                {csPathwayOptions.length > 0 && (
-                  <select
-                    value={csPathwayId}
-                    onChange={(e) =>
-                      setCsPathwayId(e.target.value ? Number(e.target.value) : '')
-                    }
-                    className="px-3 py-2 text-xs border border-slate-300 rounded-lg bg-white"
-                  >
-                    <option value="">اختر المسار...</option>
-                    {csPathwayOptions.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.nameAr}
-                      </option>
-                    ))}
-                  </select>
-                )}
-
-                <select
-                  value={csSubjectType}
-                  onChange={(e) => setCsSubjectType(e.target.value)}
-                  className="px-3 py-2 text-xs border border-slate-300 rounded-lg bg-white"
-                >
-                  <option value="CORE">أساسية (CORE)</option>
-                  <option value="SPECIALIZATION">تخصصية (SPECIALIZATION)</option>
-                  <option value="ELECTIVE">اختيارية (ELECTIVE)</option>
-                  <option value="NON_TOTAL">خارج المجموع (NON_TOTAL)</option>
-                  <option value="ACTIVITY">نشاط (ACTIVITY)</option>
-                  <option value="RELIGIOUS">تربية دينية (RELIGIOUS)</option>
-                </select>
-
-                <input
-                  type="number"
-                  min="1"
-                  max="100"
-                  placeholder="نسبة النجاح (مثال: 70 اختياري)"
-                  value={csPassThreshold}
-                  onChange={(e) => setCsPassThreshold(e.target.value)}
-                  className="px-3 py-2 text-xs border border-slate-300 rounded-lg bg-white font-mono-num"
-                />
-              </div>
-
-              <div className="flex flex-wrap gap-3 text-xs text-slate-700">
-                <label className="flex items-center gap-1">
-                  <input
-                    type="checkbox"
-                    checked={csIncludedInTotal}
-                    onChange={(e) => setCsIncludedInTotal(e.target.checked)}
-                  />
-                  <span>داخل المجموع</span>
-                </label>
-                <label className="flex items-center gap-1">
-                  <input
-                    type="checkbox"
-                    checked={csCompulsory}
-                    onChange={(e) => setCsCompulsory(e.target.checked)}
-                  />
-                  <span>إلزامية</span>
-                </label>
-                <label className="flex items-center gap-1">
-                  <input
-                    type="checkbox"
-                    checked={csElective}
-                    onChange={(e) => setCsElective(e.target.checked)}
-                  />
-                  <span>اختيارية</span>
-                </label>
-                <label className="flex items-center gap-1">
-                  <input
-                    type="checkbox"
-                    checked={csSpecialization}
-                    onChange={(e) => setCsSpecialization(e.target.checked)}
-                  />
-                  <span>تخصص</span>
-                </label>
-                <label className="flex items-center gap-1">
-                  <input
-                    type="checkbox"
-                    checked={csPassFail}
-                    onChange={(e) => setCsPassFail(e.target.checked)}
-                  />
-                  <span>نجاح ورسوب</span>
-                </label>
-                <label className="flex items-center gap-1">
-                  <input
-                    type="checkbox"
-                    checked={csActivity}
-                    onChange={(e) => setCsActivity(e.target.checked)}
-                  />
-                  <span>نشاط</span>
-                </label>
-                <label className="flex items-center gap-1">
-                  <input
-                    type="checkbox"
-                    checked={csAssignable}
-                    onChange={(e) => setCsAssignable(e.target.checked)}
-                  />
-                  <span>متاحة لتعيين المعلّمين</span>
-                </label>
-              </div>
-
-              <button
-                type="submit"
-                className="px-4 py-2 bg-teal-700 hover:bg-teal-800 text-white text-xs font-semibold rounded-lg cursor-pointer"
+            <div className="col-12 col-lg-6">
+              <form
+                onSubmit={handleAddCurriculumSubject}
+                className="jusoor-subcard p-4 space-y-3 h-full"
               >
-                إضافة المادة للمنهج
-              </button>
-            </form>
+                <div className="font-display text-sm font-bold text-[#102A43] flex items-center gap-1.5">
+                  <i className="bi bi-plus-circle text-[#0F766E]" aria-hidden="true" />
+                  <span>إضافة مادة لصف/شعبة/مسار في النسخة المحددة</span>
+                </div>
+                <div className="row g-2">
+                  <div className="col-12 col-sm-6">
+                    <select
+                      value={csGradeId}
+                      onChange={(e) => {
+                        setCsGradeId(Number(e.target.value));
+                        setCsDivisionId('');
+                        setCsPathwayId('');
+                      }}
+                      className="jusoor-select w-full px-3 py-2 text-xs"
+                    >
+                      {data.grades.map((g) => (
+                        <option key={g.id} value={g.id}>
+                          {g.nameAr}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="col-12 col-sm-6">
+                    <select
+                      value={csSubjectId}
+                      onChange={(e) => setCsSubjectId(Number(e.target.value))}
+                      className="jusoor-select w-full px-3 py-2 text-xs"
+                    >
+                      {data.masterSubjects.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.nameAr}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {csDivisionOptions.length > 0 && (
+                    <div className="col-12 col-sm-6">
+                      <select
+                        value={csDivisionId}
+                        onChange={(e) =>
+                          setCsDivisionId(e.target.value ? Number(e.target.value) : '')
+                        }
+                        className="jusoor-select w-full px-3 py-2 text-xs"
+                      >
+                        <option value="">اختر الشعبة...</option>
+                        {csDivisionOptions.map((d) => (
+                          <option key={d.id} value={d.id}>
+                            {d.nameAr}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  {csPathwayOptions.length > 0 && (
+                    <div className="col-12 col-sm-6">
+                      <select
+                        value={csPathwayId}
+                        onChange={(e) =>
+                          setCsPathwayId(e.target.value ? Number(e.target.value) : '')
+                        }
+                        className="jusoor-select w-full px-3 py-2 text-xs"
+                      >
+                        <option value="">اختر المسار...</option>
+                        {csPathwayOptions.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.nameAr}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  <div className="col-12 col-sm-6">
+                    <select
+                      value={csSubjectType}
+                      onChange={(e) => setCsSubjectType(e.target.value)}
+                      className="jusoor-select w-full px-3 py-2 text-xs"
+                    >
+                      <option value="CORE">أساسية (CORE)</option>
+                      <option value="SPECIALIZATION">تخصصية (SPECIALIZATION)</option>
+                      <option value="ELECTIVE">اختيارية (ELECTIVE)</option>
+                      <option value="NON_TOTAL">خارج المجموع (NON_TOTAL)</option>
+                      <option value="ACTIVITY">نشاط (ACTIVITY)</option>
+                      <option value="RELIGIOUS">تربية دينية (RELIGIOUS)</option>
+                    </select>
+                  </div>
+
+                  <div className="col-12 col-sm-6">
+                    <input
+                      type="number"
+                      min="1"
+                      max="100"
+                      placeholder="نسبة النجاح (مثال: 70 اختياري)"
+                      value={csPassThreshold}
+                      onChange={(e) => setCsPassThreshold(e.target.value)}
+                      className="jusoor-input w-full px-3 py-2 text-xs font-mono-num"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-3 text-xs text-[#172B4D]">
+                  <label className="flex items-center gap-1.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={csIncludedInTotal}
+                      onChange={(e) => setCsIncludedInTotal(e.target.checked)}
+                    />
+                    <span>داخل المجموع</span>
+                  </label>
+                  <label className="flex items-center gap-1.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={csCompulsory}
+                      onChange={(e) => setCsCompulsory(e.target.checked)}
+                    />
+                    <span>إلزامية</span>
+                  </label>
+                  <label className="flex items-center gap-1.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={csElective}
+                      onChange={(e) => setCsElective(e.target.checked)}
+                    />
+                    <span>اختيارية</span>
+                  </label>
+                  <label className="flex items-center gap-1.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={csSpecialization}
+                      onChange={(e) => setCsSpecialization(e.target.checked)}
+                    />
+                    <span>تخصص</span>
+                  </label>
+                  <label className="flex items-center gap-1.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={csPassFail}
+                      onChange={(e) => setCsPassFail(e.target.checked)}
+                    />
+                    <span>نجاح ورسوب</span>
+                  </label>
+                  <label className="flex items-center gap-1.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={csActivity}
+                      onChange={(e) => setCsActivity(e.target.checked)}
+                    />
+                    <span>نشاط</span>
+                  </label>
+                  <label className="flex items-center gap-1.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={csAssignable}
+                      onChange={(e) => setCsAssignable(e.target.checked)}
+                    />
+                    <span>متاحة لتعيين المعلّمين</span>
+                  </label>
+                </div>
+
+                <button
+                  type="submit"
+                  className="btn-jusoor-primary px-4 py-2 text-xs cursor-pointer"
+                >
+                  إضافة المادة للمنهج
+                </button>
+              </form>
+            </div>
           </div>
 
           {/* Filter curriculum subjects table */}
@@ -882,7 +909,7 @@ export function AdminCurriculumManager() {
                 setSelectedVersionId(e.target.value ? Number(e.target.value) : '')
               }
               aria-label="تصفية بنسخة المنهج"
-              className="px-3 py-2 text-xs border border-slate-300 rounded-lg bg-white"
+              className="jusoor-select px-3 py-2 text-xs"
             >
               {data.versions.map((v) => (
                 <option key={v.id} value={v.id}>
@@ -896,7 +923,7 @@ export function AdminCurriculumManager() {
                 setSelectedGradeId(e.target.value ? Number(e.target.value) : '')
               }
               aria-label="تصفية بالصف الدراسي"
-              className="px-3 py-2 text-xs border border-slate-300 rounded-lg bg-white"
+              className="jusoor-select px-3 py-2 text-xs"
             >
               <option value="">كل الصفوف الدراسية</option>
               {data.grades.map((g) => (
@@ -905,23 +932,23 @@ export function AdminCurriculumManager() {
                 </option>
               ))}
             </select>
-            <span className="text-xs text-slate-500 tabular-nums">
+            <span className="text-xs text-[#64748B] tabular-nums">
               إجمالي السجلات المعروضة: {data.curriculumSubjects.length}
             </span>
           </div>
 
-          <div className="overflow-x-auto border border-slate-200 rounded-xl max-h-96 overflow-y-auto">
-            <table className="w-full text-right text-xs">
-              <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 sticky top-0">
+          <div className="table-responsive border border-[#DCE5F0] rounded-xl max-h-96 overflow-y-auto">
+            <table className="table table-jusoor table-hover text-xs">
+              <thead className="sticky top-0">
                 <tr>
-                  <th className="py-2.5 px-3">المادة</th>
-                  <th className="py-2.5 px-3">الصف / الشعبة / المسار</th>
-                  <th className="py-2.5 px-3">التصنيف</th>
-                  <th className="py-2.5 px-3">تعيين المعلّمين</th>
-                  <th className="py-2.5 px-3">الحالة</th>
+                  <th>المادة</th>
+                  <th>الصف / الشعبة / المسار</th>
+                  <th>التصنيف</th>
+                  <th>تعيين المعلّمين</th>
+                  <th>الحالة</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody>
                 {data.curriculumSubjects.slice(0, 120).map((cs) => {
                   const gr = data.grades.find((g) => g.id === cs.gradeId);
                   const dv = cs.divisionId
@@ -931,23 +958,23 @@ export function AdminCurriculumManager() {
                     ? data.pathways.find((p) => p.id === cs.pathwayId)
                     : null;
                   return (
-                    <tr key={cs.id} className="hover:bg-slate-50">
-                      <td className="py-2 px-3 font-semibold text-slate-900">
+                    <tr key={cs.id}>
+                      <td className="font-semibold text-[#102A43]">
                         {cs.subjectNameAr}
                       </td>
-                      <td className="py-2 px-3 text-slate-600">
+                      <td className="text-[#64748B]">
                         {gr?.nameAr}
                         {dv ? ` · ${dv.nameAr}` : ''}
                         {pw ? ` · ${pw.nameAr}` : ''}
                       </td>
-                      <td className="py-2 px-3 text-slate-600">
+                      <td className="text-[#64748B]">
                         {cs.isIncludedInTotal ? 'داخل المجموع' : 'خارج المجموع'}
                         {cs.isActivity ? ' · نشاط' : ''}
                         {cs.passThresholdPercent
                           ? ` · نجاح ${cs.passThresholdPercent}%`
                           : ''}
                       </td>
-                      <td className="py-2 px-3">
+                      <td>
                         <button
                           type="button"
                           onClick={() =>
@@ -958,14 +985,14 @@ export function AdminCurriculumManager() {
                           }
                           className={`font-semibold cursor-pointer ${
                             cs.isAvailableForTeacherAssignment
-                              ? 'text-teal-700 hover:underline'
-                              : 'text-slate-500 hover:underline'
+                              ? 'text-[#0F766E] hover:underline'
+                              : 'text-[#64748B] hover:underline'
                           }`}
                         >
                           {cs.isAvailableForTeacherAssignment ? 'متاحة' : 'مغلقة'}
                         </button>
                       </td>
-                      <td className="py-2 px-3">
+                      <td>
                         <button
                           type="button"
                           onClick={() =>
@@ -975,8 +1002,8 @@ export function AdminCurriculumManager() {
                           }
                           className={`font-semibold cursor-pointer ${
                             cs.isActive
-                              ? 'text-teal-700 hover:underline'
-                              : 'text-red-700 hover:underline'
+                              ? 'text-[#0F766E] hover:underline'
+                              : 'text-[#DC2626] hover:underline'
                           }`}
                         >
                           {cs.isActive ? 'نشطة' : 'معطّلة'}
@@ -993,136 +1020,153 @@ export function AdminCurriculumManager() {
 
       {/* Sub-tab 3: Teacher Assignments */}
       {activeSubTab === 'ASSIGNMENTS' && (
-        <div className="space-y-5">
+        <div className="space-y-4">
           <form
             onSubmit={handleAdminAssignTeacher}
-            className="border border-slate-200 rounded-xl p-5 space-y-3 bg-slate-50/60"
+            className="jusoor-subcard p-4 space-y-3"
           >
-            <div className="font-display text-sm font-bold text-slate-900 flex items-center gap-1.5">
-              <Users className="w-4 h-4 text-teal-700" />
+            <div className="font-display text-sm font-bold text-[#102A43] flex items-center gap-1.5">
+              <i className="bi bi-people text-[#0F766E]" aria-hidden="true" />
               <span>ربط معلّم بمادة منهجية وصف دراسي (متعدد إلى متعدد M:N)</span>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <select
-                value={assignTeacherId}
-                onChange={(e) => setAssignTeacherId(Number(e.target.value))}
-                className="px-3 py-2 text-xs border border-slate-300 rounded-lg bg-white"
-              >
-                {data.teachers.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.fullName}
-                  </option>
-                ))}
-              </select>
-              <select
-                value={assignCurrSubjectId}
-                onChange={(e) => setAssignCurrSubjectId(Number(e.target.value))}
-                className="px-3 py-2 text-xs border border-slate-300 rounded-lg bg-white"
-              >
-                {data.curriculumSubjects.slice(0, 150).map((cs) => {
-                  const gr = data.grades.find((g) => g.id === cs.gradeId);
-                  return (
-                    <option key={cs.id} value={cs.id}>
-                      {cs.subjectNameAr} — {gr?.nameAr}
+            <div className="row g-2.5">
+              <div className="col-12 col-sm-4">
+                <select
+                  value={assignTeacherId}
+                  onChange={(e) => setAssignTeacherId(Number(e.target.value))}
+                  className="jusoor-select w-full px-3 py-2 text-xs"
+                >
+                  {data.teachers.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.fullName}
                     </option>
-                  );
-                })}
-              </select>
-              <input
-                type="number"
-                min="0"
-                step="1"
-                value={assignRate}
-                onChange={(e) => setAssignRate(e.target.value)}
-                placeholder="السعر بالدولار"
-                className="px-3 py-2 text-xs border border-slate-300 rounded-lg bg-white font-mono-num"
-              />
+                  ))}
+                </select>
+              </div>
+              <div className="col-12 col-sm-5">
+                <select
+                  value={assignCurrSubjectId}
+                  onChange={(e) => setAssignCurrSubjectId(Number(e.target.value))}
+                  className="jusoor-select w-full px-3 py-2 text-xs"
+                >
+                  {data.curriculumSubjects.slice(0, 150).map((cs) => {
+                    const gr = data.grades.find((g) => g.id === cs.gradeId);
+                    return (
+                      <option key={cs.id} value={cs.id}>
+                        {cs.subjectNameAr} — {gr?.nameAr}
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+              <div className="col-12 col-sm-3">
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={assignRate}
+                  onChange={(e) => setAssignRate(e.target.value)}
+                  placeholder="السعر بالدولار"
+                  className="jusoor-input w-full px-3 py-2 text-xs font-mono-num"
+                />
+              </div>
             </div>
             <button
               type="submit"
-              className="px-4 py-2 bg-teal-700 hover:bg-teal-800 text-white text-xs font-semibold rounded-lg cursor-pointer"
+              className="btn-jusoor-primary px-4 py-2 text-xs cursor-pointer"
             >
               تعيين المعلّم للمادة
             </button>
           </form>
 
-          <div className="divide-y divide-slate-200 border border-slate-200 rounded-xl overflow-hidden max-h-96 overflow-y-auto">
-            {data.teacherAssignments.map((a) => (
-              <div
-                key={a.id}
-                className="p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs bg-white"
-              >
-                <div>
-                  <span className="font-bold text-slate-900">{a.teacherName}</span>
-                  {' · '}
-                  <span className="font-semibold text-teal-800">
-                    {a.subjectNameAr}
-                  </span>
-                  {' · '}
-                  <span className="text-slate-600">
-                    {a.systemNameAr} / {a.gradeNameAr}
-                    {a.divisionNameAr ? ` / ${a.divisionNameAr}` : ''}
-                    {a.pathwayNameAr ? ` / ${a.pathwayNameAr}` : ''}
-                  </span>
-                  <div className="text-[11px] text-slate-500 mt-0.5">
-                    اللغات:{' '}
-                    {(a.languagesOffered || [])
-                      .map((l) => LANGUAGE_OF_INSTRUCTION_LABELS[l]?.ar || l)
-                      .join(' / ')}
-                    {a.hourlyRate && ` · $${a.hourlyRate}`}
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => handleAdminDeleteAssignment(a.id)}
-                  className="text-red-700 hover:underline font-semibold flex items-center gap-1 cursor-pointer"
+          {data.teacherAssignments.length === 0 ? (
+            <EmptyState
+              icon="bi-person-workspace"
+              title="لا توجد تعيينات مسجلة حالياً"
+            />
+          ) : (
+            <div className="divide-y divide-[#EDF2F7] border border-[#DCE5F0] rounded-xl overflow-hidden max-h-96 overflow-y-auto">
+              {data.teacherAssignments.map((a) => (
+                <div
+                  key={a.id}
+                  className="p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs bg-white"
                 >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  <span>حذف</span>
-                </button>
-              </div>
-            ))}
-          </div>
+                  <div>
+                    <span className="font-bold text-[#102A43]">{a.teacherName}</span>
+                    {' · '}
+                    <span className="font-semibold text-[#0F766E]">
+                      {a.subjectNameAr}
+                    </span>
+                    {' · '}
+                    <span className="text-[#64748B]">
+                      {a.systemNameAr} / {a.gradeNameAr}
+                      {a.divisionNameAr ? ` / ${a.divisionNameAr}` : ''}
+                      {a.pathwayNameAr ? ` / ${a.pathwayNameAr}` : ''}
+                    </span>
+                    <div className="text-[11px] text-[#64748B] mt-0.5">
+                      اللغات:{' '}
+                      {(a.languagesOffered || [])
+                        .map((l) => LANGUAGE_OF_INSTRUCTION_LABELS[l]?.ar || l)
+                        .join(' / ')}
+                      {a.hourlyRate && ` · $${a.hourlyRate}`}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleAdminDeleteAssignment(a.id)}
+                    className="text-[#DC2626] hover:underline font-semibold inline-flex items-center gap-1 cursor-pointer"
+                  >
+                    <i className="bi bi-trash3" aria-hidden="true" />
+                    <span>حذف</span>
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
-      {/* Sub-tab 4: Systems, Grades, Divisions & Pathways Hierarchy Overview */}
+      {/* Sub-tab 4: Systems, Grades, Divisions & Pathways */}
       {activeSubTab === 'HIERARCHY' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-          <div className="border border-slate-200 rounded-xl p-4 space-y-2">
-            <h3 className="font-bold text-slate-900">
-              الأنظمة التعليمية ({data.systems.length})
-            </h3>
-            <ul className="divide-y divide-slate-100">
-              {data.systems.map((s) => (
-                <li key={s.id} className="py-2 flex items-center justify-between">
-                  <span>
-                    <strong className="text-slate-900">{s.nameAr}</strong> ·{' '}
-                    <span className="text-slate-500">{s.nameEn}</span>
-                  </span>
-                  <span className="font-mono-num text-slate-400">{s.code}</span>
-                </li>
-              ))}
-            </ul>
+        <div className="row g-3 text-xs">
+          <div className="col-12 col-md-6">
+            <div className="jusoor-subcard p-4 space-y-2 h-full">
+              <h3 className="font-display text-sm font-bold text-[#102A43] m-0">
+                الأنظمة التعليمية ({data.systems.length})
+              </h3>
+              <ul className="divide-y divide-[#DCE5F0] list-none p-0 m-0">
+                {data.systems.map((s) => (
+                  <li key={s.id} className="py-2 flex items-center justify-between">
+                    <span>
+                      <strong className="text-[#102A43]">{s.nameAr}</strong> ·{' '}
+                      <span className="text-[#64748B]">{s.nameEn}</span>
+                    </span>
+                    <span className="font-mono-num text-[#64748B]">{s.code}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
           </div>
 
-          <div className="border border-slate-200 rounded-xl p-4 space-y-2">
-            <h3 className="font-bold text-slate-900">
-              الشعب والمسارات التخصصية ({data.divisions.length + data.pathways.length})
-            </h3>
-            <div className="space-y-1.5 max-h-64 overflow-y-auto">
-              {data.divisions.map((d) => (
-                <div key={`div-${d.id}`} className="py-1 border-b border-slate-100">
-                  <span className="font-semibold text-slate-800">{d.nameAr}</span>{' '}
-                  <span className="text-slate-500">({d.nameEn})</span>
-                </div>
-              ))}
-              {data.pathways.map((p) => (
-                <div key={`pw-${p.id}`} className="py-1 border-b border-slate-100">
-                  <span className="font-semibold text-teal-800">{p.nameAr}</span>{' '}
-                  <span className="text-slate-500">({p.nameEn})</span>
-                </div>
-              ))}
+          <div className="col-12 col-md-6">
+            <div className="jusoor-subcard p-4 space-y-2 h-full">
+              <h3 className="font-display text-sm font-bold text-[#102A43] m-0">
+                الشعب والمسارات التخصصية ({data.divisions.length + data.pathways.length})
+              </h3>
+              <div className="space-y-1.5 max-h-64 overflow-y-auto">
+                {data.divisions.map((d) => (
+                  <div key={`div-${d.id}`} className="py-1.5 border-b border-[#DCE5F0]">
+                    <span className="font-semibold text-[#102A43]">{d.nameAr}</span>{' '}
+                    <span className="text-[#64748B]">({d.nameEn})</span>
+                  </div>
+                ))}
+                {data.pathways.map((p) => (
+                  <div key={`pw-${p.id}`} className="py-1.5 border-b border-[#DCE5F0]">
+                    <span className="font-semibold text-[#0F766E]">{p.nameAr}</span>{' '}
+                    <span className="text-[#64748B]">({p.nameEn})</span>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </div>

@@ -1,7 +1,8 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { Send, MessageSquare, Bell } from 'lucide-react';
 import { apiFetch } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
+import { PageHeader } from '../components/ui/PageHeader';
+import { EmptyState } from '../components/ui/EmptyState';
 
 interface ConversationItem {
   id: number;
@@ -27,7 +28,8 @@ interface NotificationItem {
 }
 
 export function MessagesPage() {
-  const { user, openAuthModal } = useAuth();
+  const { user, openAuthModal, locale } = useAuth();
+  const isAr = locale === 'ar';
   const [conversations, setConversations] = useState<ConversationItem[]>([]);
   const [activeConvId, setActiveConvId] = useState<number | null>(null);
   const [messages, setMessages] = useState<MessageItem[]>([]);
@@ -96,159 +98,189 @@ export function MessagesPage() {
 
   if (!user) {
     return (
-      <div className="max-w-3xl mx-auto px-4 py-16 text-center space-y-4">
-        <h1 className="font-display text-2xl font-bold text-slate-900">
-          الرسائل والإشعارات
-        </h1>
-        <p className="text-sm text-slate-600">
-          سجّل الدخول للتواصل مع المعلّمين والمرشدين ومتابعة إشعاراتك.
-        </p>
-        <button
-          type="button"
-          onClick={openAuthModal}
-          className="px-6 py-3 bg-teal-700 text-white text-sm font-semibold rounded-lg cursor-pointer"
-        >
-          تسجيل الدخول
-        </button>
+      <div>
+        <PageHeader
+          title={isAr ? 'الرسائل والإشعارات' : 'Messages & Notifications'}
+          subtitle={
+            isAr
+              ? 'سجّل الدخول للتواصل مع المعلّمين والمرشدين ومتابعة إشعاراتك.'
+              : 'Sign in to message instructors and view your notifications.'
+          }
+        />
+        <div className="container-xxl px-3 px-sm-4 py-5">
+          <EmptyState
+            icon="bi-chat-dots"
+            title={isAr ? 'سجّل الدخول للمراسلة' : 'Sign in to view messages'}
+            description={
+              isAr
+                ? 'المحادثات المباشرة محمية ومقيّدة بأطراف كل جلسة أو مهمة تعليمية.'
+                : 'Direct messaging is secured to enrolled participants.'
+            }
+            action={
+              <button
+                type="button"
+                onClick={openAuthModal}
+                className="btn-jusoor-primary px-5 py-2.5 text-sm cursor-pointer"
+              >
+                {isAr ? 'تسجيل الدخول' : 'Sign In'}
+              </button>
+            }
+          />
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 space-y-6">
-      <div>
-        <h1 className="font-display text-2xl font-extrabold text-slate-900">
-          الرسائل والإشعارات
-        </h1>
-        <p className="text-xs text-slate-500 mt-1">
-          المراسلات محفوظة في قاعدة البيانات ومقيّدة بأعضاء كل محادثة فقط (يتم تحديثها عند الإرسال أو التحديث).
-        </p>
-      </div>
+    <div>
+      <PageHeader
+        kicker={isAr ? 'التواصل المباشر' : 'Direct Messaging'}
+        title={isAr ? 'الرسائل والإشعارات' : 'Messages & Notifications'}
+        subtitle={
+          isAr
+            ? 'المراسلات محفوظة في قاعدة البيانات ومقيّدة بأعضاء كل محادثة فقط.'
+            : 'Messages are persisted securely and scoped to conversation members.'
+        }
+      />
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Conversations List */}
-        <div className="lg:col-span-4 bg-white border border-slate-200 rounded-xl p-4 space-y-2">
-          <h2 className="font-display text-sm font-bold text-slate-800 flex items-center gap-2 pb-2 border-b border-slate-100">
-            <MessageSquare className="w-4 h-4 text-teal-700" />
-            <span>المحادثات ({conversations.length})</span>
-          </h2>
-          {conversations.length === 0 ? (
-            <p className="text-xs text-slate-500 py-4">
-              لا توجد محادثات بعد. تُفتح المحادثات تلقائياً عند قبول عرض مهمة أو بدء تواصل.
-            </p>
-          ) : (
-            <div className="space-y-1">
-              {conversations.map((conv) => (
-                <button
-                  key={conv.id}
-                  type="button"
-                  onClick={() => setActiveConvId(conv.id)}
-                  className={`w-full text-right p-3 rounded-lg transition-colors cursor-pointer ${
-                    activeConvId === conv.id
-                      ? 'bg-teal-50 border border-teal-200'
-                      : 'hover:bg-slate-50 border border-transparent'
-                  }`}
-                >
-                  <div className="text-xs font-bold text-slate-900 truncate">
-                    {conv.subject}
-                  </div>
-                  <div className="text-[11px] text-slate-500 truncate mt-0.5">
-                    {conv.members.map((m) => m.fullName).join(' · ')}
-                  </div>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Message Thread */}
-        <div className="lg:col-span-5 bg-white border border-slate-200 rounded-xl p-5 flex flex-col justify-between min-h-[420px]">
-          <div className="space-y-3 overflow-y-auto max-h-96">
-            {messages.length === 0 ? (
-              <p className="text-sm text-slate-400 text-center py-12">
-                اختر محادثة لعرض الرسائل
-              </p>
-            ) : (
-              messages.map((m) => {
-                const mine = m.senderUserId === user.id;
-                return (
-                  <div
-                    key={m.id}
-                    className={`p-3 rounded-xl text-sm max-w-[85%] ${
-                      mine
-                        ? 'bg-teal-700 text-white mr-auto'
-                        : 'bg-slate-100 text-slate-900 ml-auto'
-                    }`}
-                  >
-                    <div
-                      className={`text-[11px] font-semibold mb-1 ${
-                        mine ? 'text-teal-100' : 'text-slate-500'
+      <div className="container-xxl px-3 px-sm-4 py-4 py-md-5">
+        <div className="row g-4">
+          {/* Conversations List */}
+          <div className="col-12 col-lg-4">
+            <div className="jusoor-card p-4 space-y-3 h-full">
+              <h2 className="font-display text-sm font-bold text-[#102A43] flex items-center gap-2 pb-2.5 border-b border-[#DCE5F0] m-0">
+                <i className="bi bi-chat-left-text text-[#247BA0]" aria-hidden="true" />
+                <span>المحادثات ({conversations.length})</span>
+              </h2>
+              {conversations.length === 0 ? (
+                <p className="text-xs text-[#64748B] py-4 m-0">
+                  لا توجد محادثات بعد. تُفتح المحادثات تلقائياً عند قبول عرض مهمة أو بدء تواصل.
+                </p>
+              ) : (
+                <div className="space-y-1.5">
+                  {conversations.map((conv) => (
+                    <button
+                      key={conv.id}
+                      type="button"
+                      onClick={() => setActiveConvId(conv.id)}
+                      className={`w-full text-start p-3 rounded-xl transition-colors cursor-pointer border ${
+                        activeConvId === conv.id
+                          ? 'bg-[#E8F8F5] border-[#99E2D8]'
+                          : 'bg-transparent border-transparent hover:bg-[#F5F8FC]'
                       }`}
                     >
-                      {m.senderName}
-                    </div>
-                    <p className="leading-relaxed">{m.body}</p>
-                  </div>
-                );
-              })
-            )}
+                      <div className="text-xs font-bold text-[#102A43] truncate">
+                        {conv.subject}
+                      </div>
+                      <div className="text-[11px] text-[#64748B] truncate mt-0.5">
+                        {conv.members.map((m) => m.fullName).join(' · ')}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
-          {activeConvId && (
-            <form
-              onSubmit={handleSend}
-              className="pt-4 mt-4 border-t border-slate-200 flex gap-2"
-            >
-              <input
-                type="text"
-                required
-                value={body}
-                onChange={(e) => setBody(e.target.value)}
-                placeholder="اكتب رسالتك..."
-                className="flex-1 px-3 py-2 text-sm border border-slate-300 rounded-lg"
-              />
-              <button
-                type="submit"
-                disabled={sending}
-                aria-label="إرسال الرسالة"
-                className="px-4 py-2 bg-teal-700 hover:bg-teal-800 text-white text-sm font-semibold rounded-lg flex items-center gap-1.5 cursor-pointer disabled:opacity-60"
-              >
-                <Send className="w-4 h-4" />
-                <span>إرسال</span>
-              </button>
-            </form>
-          )}
-        </div>
-
-        {/* Notifications Panel */}
-        <div className="lg:col-span-3 bg-white border border-slate-200 rounded-xl p-4 space-y-3">
-          <h2 className="font-display text-sm font-bold text-slate-800 flex items-center gap-2 pb-2 border-b border-slate-100">
-            <Bell className="w-4 h-4 text-teal-700" />
-            <span>الإشعارات</span>
-          </h2>
-          {notifications.length === 0 ? (
-            <p className="text-xs text-slate-500">لا توجد إشعارات.</p>
-          ) : (
-            <div className="divide-y divide-slate-100">
-              {notifications.map((n) => (
-                <div key={n.id} className="py-2.5 space-y-1">
-                  <div className="text-xs font-bold text-slate-900">
-                    {n.title}
+          {/* Message Thread */}
+          <div className="col-12 col-lg-5">
+            <div className="jusoor-card p-4 p-sm-5 flex flex-col justify-between min-h-[420px] h-full">
+              <div className="space-y-3 overflow-y-auto max-h-96">
+                {messages.length === 0 ? (
+                  <div className="py-12 text-center space-y-2">
+                    <i
+                      className="bi bi-chat-square-dots text-2xl text-[#64748B]"
+                      aria-hidden="true"
+                    />
+                    <p className="text-sm text-[#64748B] m-0">
+                      اختر محادثة لعرض الرسائل
+                    </p>
                   </div>
-                  <p className="text-xs text-slate-600">{n.body}</p>
-                  {!n.isRead && (
-                    <button
-                      type="button"
-                      onClick={() => handleMarkRead(n.id)}
-                      className="text-[11px] text-teal-700 hover:underline cursor-pointer"
-                    >
-                      تحديد كمقروء
-                    </button>
-                  )}
-                </div>
-              ))}
+                ) : (
+                  messages.map((m) => {
+                    const mine = m.senderUserId === user.id;
+                    return (
+                      <div
+                        key={m.id}
+                        className={`p-3 rounded-xl text-sm max-w-[85%] ${
+                          mine
+                            ? 'bg-[#102A43] text-white ms-auto'
+                            : 'bg-[#EEF4FA] text-[#172B4D] me-auto'
+                        }`}
+                      >
+                        <div
+                          className={`text-[11px] font-semibold mb-1 ${
+                            mine ? 'text-[#A7F3D0]' : 'text-[#64748B]'
+                          }`}
+                        >
+                          {m.senderName}
+                        </div>
+                        <p className="leading-relaxed m-0">{m.body}</p>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              {activeConvId && (
+                <form
+                  onSubmit={handleSend}
+                  className="pt-4 mt-4 border-t border-[#DCE5F0] flex gap-2"
+                >
+                  <input
+                    type="text"
+                    required
+                    value={body}
+                    onChange={(e) => setBody(e.target.value)}
+                    placeholder="اكتب رسالتك..."
+                    className="jusoor-input flex-1 px-3 py-2 text-sm"
+                  />
+                  <button
+                    type="submit"
+                    disabled={sending}
+                    aria-label="إرسال الرسالة"
+                    className="btn-jusoor-primary px-4 py-2 text-sm inline-flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <i className="bi bi-send" aria-hidden="true" />
+                    <span>إرسال</span>
+                  </button>
+                </form>
+              )}
             </div>
-          )}
+          </div>
+
+          {/* Notifications Panel */}
+          <div className="col-12 col-lg-3">
+            <div className="jusoor-card p-4 space-y-3 h-full">
+              <h2 className="font-display text-sm font-bold text-[#102A43] flex items-center gap-2 pb-2.5 border-b border-[#DCE5F0] m-0">
+                <i className="bi bi-bell text-[#247BA0]" aria-hidden="true" />
+                <span>الإشعارات ({notifications.length})</span>
+              </h2>
+              {notifications.length === 0 ? (
+                <p className="text-xs text-[#64748B] m-0">لا توجد إشعارات.</p>
+              ) : (
+                <div className="divide-y divide-[#EDF2F7]">
+                  {notifications.map((n) => (
+                    <div key={n.id} className="py-2.5 space-y-1">
+                      <div className="text-xs font-bold text-[#102A43]">
+                        {n.title}
+                      </div>
+                      <p className="text-xs text-[#64748B] m-0">{n.body}</p>
+                      {!n.isRead && (
+                        <button
+                          type="button"
+                          onClick={() => handleMarkRead(n.id)}
+                          className="text-[11px] font-semibold text-[#0F766E] hover:underline cursor-pointer"
+                        >
+                          تحديد كمقروء
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       </div>
     </div>

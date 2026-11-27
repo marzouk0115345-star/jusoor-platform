@@ -1586,7 +1586,7 @@ const STAGE_TEACHERS: StageTeacherDef[] = [
   },
   {
     email: 'sec.english.2@teachers.demo.jusoor.edu',
-    fullName: 'أ. ياسمين حسن',
+    fullName: 'أ. سلمى عبد العزيز',
     headline: 'معلمة لغة إنجليزية (لغة أجنبية أولى) — الثانوية العامة',
     bio: 'تأهيل طلاب الصفوف الثلاثة بالثانوية العامة لإتقان الفهم القرائي والكتابة الأكاديمية.',
     qualifications: `بكالوريوس ألسن لغة إنجليزية ${DEMO_QUAL_SUFFIX}`,

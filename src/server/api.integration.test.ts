@@ -1,7 +1,79 @@
+import 'dotenv/config';
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import type { Server } from 'node:http';
+import {
+  assertSafeTestEnvironment,
+  bootstrapIsolatedTestSchema,
+  teardownIsolatedTestSchema,
+} from './testGuard.ts';
 
-const BASE = 'http://localhost:3000/api';
+const TEST_SCHEMA = (process.env.SQL_SCHEMA =
+  process.env.SQL_SCHEMA && process.env.SQL_SCHEMA !== 'public'
+    ? process.env.SQL_SCHEMA
+    : 'jusoor_test');
+
+assertSafeTestEnvironment();
+
+let BASE = '';
+let server: Server | undefined;
+let closePoolFn: (() => Promise<void>) | undefined;
+let seedRealisticFn:
+  | (() => Promise<{
+      centersAdded: number;
+      coursesAdded: number;
+      quizzesAdded: number;
+      tasksAdded: number;
+      sessionsAdded: number;
+      availabilityAdded: number;
+    }>)
+  | undefined;
+
+function futureIsoDate(daysAhead: number): string {
+  const d = new Date(Date.now() + daysAhead * 86_400_000);
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(d.getUTCDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+test.before(async () => {
+  await bootstrapIsolatedTestSchema(TEST_SCHEMA);
+  const [{ createApp }, { activeSchema, closePool }, { seedRealisticPlatformData }] =
+    await Promise.all([
+      import('./app.ts'),
+      import('../db/index.ts'),
+      import('./realisticDataSeed.ts'),
+    ]);
+
+  assert.equal(activeSchema, TEST_SCHEMA);
+  closePoolFn = closePool;
+  seedRealisticFn = seedRealisticPlatformData;
+
+  const app = createApp({ disableAuthRateLimit: true });
+  await new Promise<void>((resolve) => {
+    server = app.listen(0, '127.0.0.1', () => {
+      const addr = server!.address();
+      if (!addr || typeof addr === 'string') {
+        throw new Error('Failed to bind ephemeral integration test server');
+      }
+      BASE = `http://127.0.0.1:${addr.port}/api`;
+      resolve();
+    });
+  });
+});
+
+test.after(async () => {
+  if (server) {
+    await new Promise<void>((resolve, reject) => {
+      server!.close((err) => (err ? reject(err) : resolve()));
+    });
+  }
+  await teardownIsolatedTestSchema(TEST_SCHEMA);
+  if (closePoolFn) {
+    await closePoolFn();
+  }
+});
 
 async function api(
   path: string,
@@ -163,7 +235,24 @@ test('JUSOOR end-to-end API & RBAC integration suite', async () => {
     assert.equal(typeof quizRes.data.attempt.score, 'number');
   }
 
-  // 6. Educational Tasks Marketplace full lifecycle + atomic double-accept guard
+  // 6. Educational Tasks Marketplace full lifecycle + unrealistic deadline rejection + atomic double-accept guard
+  const invalidFarDeadlineRes = await api('/tasks', {
+    method: 'POST',
+    token: studentToken,
+    body: {
+      title: `مهمة بموعد غير واقعي ${suffix}`,
+      description: 'اختبار رفض التاريخ البعيد جداً مثل 2099-12-30.',
+      categoryId: firstCategoryId,
+      fieldId: firstFieldId,
+      stageId: firstStageId,
+      budget: 40,
+      expectedDuration: 'يومان',
+      preferredMethod: 'ONLINE',
+      deadline: '2099-12-30',
+    },
+  });
+  assert.equal(invalidFarDeadlineRes.status, 400);
+
   const createTaskRes = await api('/tasks', {
     method: 'POST',
     token: studentToken,
@@ -177,7 +266,7 @@ test('JUSOOR end-to-end API & RBAC integration suite', async () => {
       budget: 55,
       expectedDuration: '3 أيام',
       preferredMethod: 'ONLINE',
-      deadline: '2099-12-30',
+      deadline: futureIsoDate(20),
     },
   });
   assert.equal(createTaskRes.status, 201);
@@ -258,13 +347,26 @@ test('JUSOOR end-to-end API & RBAC integration suite', async () => {
   });
   assert.equal(reviewRes.status, 201);
 
-  // 7. Booking atomic double-booking prevention & cancel
-  const slotRes = await api('/availability', {
+  // 7. Booking atomic double-booking prevention, far-future slot rejection & cancel
+  const badSlotRes = await api('/availability', {
     method: 'POST',
     token: teacherToken,
     body: {
       dayOfWeek: 'الاثنين',
       slotDate: '2099-12-15',
+      startTime: '14:00',
+      endTime: '15:00',
+      serviceType: 'MENTORSHIP',
+    },
+  });
+  assert.equal(badSlotRes.status, 400);
+
+  const slotRes = await api('/availability', {
+    method: 'POST',
+    token: teacherToken,
+    body: {
+      dayOfWeek: 'الاثنين',
+      slotDate: futureIsoDate(15),
       startTime: '14:00',
       endTime: '15:00',
       serviceType: 'MENTORSHIP',
@@ -1580,7 +1682,1114 @@ test('JUSOOR end-to-end API & RBAC integration suite', async () => {
     dash1on1After.meetingUrl,
     'https://meet.jusoor.example/qa-1on1-flow'
   );
+
+  // =========================================================================
+  // 17. Suspended Owner Filtering, Admin Origin Separation & Realistic Seed
+  // =========================================================================
+  const suspendTeacherB = await api(`/admin/users/${teacherBId}/status`, {
+    method: 'PATCH',
+    token: adminToken,
+    body: { accountStatus: 'SUSPENDED' },
+  });
+  assert.equal(suspendTeacherB.status, 200);
+
+  const coursesAfterSuspend = await api('/courses');
+  assert.equal(coursesAfterSuspend.status, 200);
+  assert.equal(
+    coursesAfterSuspend.data.courses.some(
+      (c: { title: string }) => c.title === otherInstructorCourseTitle
+    ),
+    false,
+    'Courses owned by a SUSPENDED user must be hidden from public GET /courses'
+  );
+
+  const adminOverviewEnd = await api('/admin/overview', { token: adminToken });
+  assert.equal(adminOverviewEnd.status, 200);
+  assert.ok(adminOverviewEnd.data.stats.qaUsersCount >= 1);
+  assert.ok(adminOverviewEnd.data.stats.demoUsersCount >= 180);
+
+  const firstRealisticSeed = await seedRealisticFn!();
+  assert.ok(firstRealisticSeed.coursesAdded >= 6);
+  assert.ok(firstRealisticSeed.tasksAdded >= 5);
+  assert.ok(firstRealisticSeed.centersAdded >= 2);
+  assert.ok(firstRealisticSeed.sessionsAdded >= 8);
+
+  const secondRealisticSeed = await seedRealisticFn!();
+  assert.equal(secondRealisticSeed.coursesAdded, 0);
+  assert.equal(secondRealisticSeed.tasksAdded, 0);
+  assert.equal(secondRealisticSeed.centersAdded, 0);
+  assert.equal(secondRealisticSeed.sessionsAdded, 0);
+
+  // =========================================================================
+  // 18. CENTER OWNER DASHBOARD, ISOLATION, IMAGE STORAGE & SETTINGS
+  // =========================================================================
+  const owner1Login = await api('/auth/demo-login', {
+    method: 'POST',
+    body: { email: 'center.owner@demo.jusoor.edu' },
+  });
+  assert.equal(owner1Login.status, 200);
+  const owner1Token: string = owner1Login.data.token;
+
+  const owner1Centers = await api('/center-dashboard/my-centers', {
+    token: owner1Token,
+  });
+  assert.equal(owner1Centers.status, 200);
+  assert.ok(owner1Centers.data.centers.length >= 1);
+  const center1Id: number = owner1Centers.data.centers[0].id;
+
+  // Register a second independent Center Owner & Center 2 for strict isolation tests
+  const owner2Reg = await api('/auth/register', {
+    method: 'POST',
+    body: {
+      email: `qa.center2.${suffix}@jusoor.test`,
+      password: 'Password123!',
+      fullName: 'أ. مالك المركز الثاني',
+      primaryRole: 'CENTER_OWNER',
+    },
+  });
+  assert.equal(owner2Reg.status, 201);
+  const owner2Token: string = owner2Reg.data.token;
+
+  const createCenter2 = await api('/centers', {
+    method: 'POST',
+    token: owner2Token,
+    body: {
+      name: `أكاديمية التميز المستقلة ${suffix}`,
+      description: 'مركز تعليمي مستقل لاختبار عزل البيانات والصلاحيات.',
+      city: 'الإسكندرية',
+      country: 'مصر',
+    },
+  });
+  assert.equal(createCenter2.status, 201);
+  const center2Id: number = createCenter2.data.center.id;
+
+  // Owner 2 MUST NOT access Owner 1's center dashboard endpoints (403)
+  const crossOverview = await api(`/center-dashboard/${center1Id}/overview`, {
+    token: owner2Token,
+  });
+  assert.equal(crossOverview.status, 403);
+  const crossStudents = await api(`/center-dashboard/${center1Id}/students`, {
+    token: owner2Token,
+  });
+  assert.equal(crossStudents.status, 403);
+
+  // Center 1 overview check (with idempotent demo branches/rooms/students seeded)
+  const center1Ov = await api(`/center-dashboard/${center1Id}/overview`, {
+    token: owner1Token,
+  });
+  assert.equal(center1Ov.status, 200);
+  assert.ok(center1Ov.data.stats.branchesCount >= 2);
+  assert.ok(center1Ov.data.stats.roomsCount >= 3);
+
+  // Add a teacher to Center 1 AND to Center 2, then deactivate ONLY in Center 1
+  const addTeacherC1 = await api(`/center-dashboard/${center1Id}/teachers`, {
+    method: 'POST',
+    token: owner1Token,
+    body: {
+      fullName: 'أ. حسام عبد الرحمن',
+      email: `qa.ctr.teacher.${suffix}@jusoor.test`,
+      phone: '01099887766',
+      jobTitle: 'معلّم فيزياء للثانوية العامة',
+      employmentType: 'FULL_TIME',
+      memberRole: 'INSTRUCTOR',
+      assignments: [
+        {
+          subjectId: firstSubjectId,
+          stageId: firstStageId,
+        },
+      ],
+    },
+  });
+  assert.equal(addTeacherC1.status, 201);
+  const c1MemberId: number = addTeacherC1.data.member.id;
+  const cTeacherUserId: number = addTeacherC1.data.member.userId;
+
+  const addTeacherC2 = await api(`/center-dashboard/${center2Id}/teachers`, {
+    method: 'POST',
+    token: owner2Token,
+    body: {
+      email: `qa.ctr.teacher.${suffix}@jusoor.test`,
+      jobTitle: 'معلّم فيزياء متعاون',
+      employmentType: 'PART_TIME',
+      memberRole: 'INSTRUCTOR',
+    },
+  });
+  assert.equal(addTeacherC2.status, 201);
+
+  const toggleTeacherC1Off = await api(
+    `/center-dashboard/${center1Id}/teachers/${c1MemberId}/status`,
+    {
+      method: 'PATCH',
+      token: owner1Token,
+      body: { status: 'INACTIVE' },
+    }
+  );
+  assert.equal(toggleTeacherC1Off.status, 200);
+  assert.equal(toggleTeacherC1Off.data.member.status, 'INACTIVE');
+
+  // Verify Center 2 teacher stays ACTIVE & public /centers hides inactive member ONLY from Center 1
+  const c2TeachersList = await api(`/center-dashboard/${center2Id}/teachers`, {
+    token: owner2Token,
+  });
+  assert.equal(c2TeachersList.status, 200);
+  const tInC2 = c2TeachersList.data.teachers.find(
+    (t: { userId: number }) => t.userId === cTeacherUserId
+  );
+  assert.equal(tInC2.status, 'ACTIVE');
+  assert.equal(tInC2.accountStatus, 'ACTIVE');
+
+  const publicCentersAfterDeactivate = await api('/centers');
+  const pubC1 = publicCentersAfterDeactivate.data.centers.find(
+    (c: { id: number }) => c.id === center1Id
+  );
+  const pubC2 = publicCentersAfterDeactivate.data.centers.find(
+    (c: { id: number }) => c.id === center2Id
+  );
+  assert.equal(
+    pubC1.members.some((m: { userId: number }) => m.userId === cTeacherUserId),
+    false,
+    'Deactivated teacher in Center 1 must be hidden from Center 1 public roster'
+  );
+  assert.equal(
+    pubC2.members.some((m: { userId: number }) => m.userId === cTeacherUserId),
+    true,
+    'Same teacher must remain visible in Center 2 public roster'
+  );
+
+  // Reactivate teacher in Center 1 so they are eligible for Center 1 course assignment
+  const toggleTeacherC1On = await api(
+    `/center-dashboard/${center1Id}/teachers/${c1MemberId}/status`,
+    {
+      method: 'PATCH',
+      token: owner1Token,
+      body: { status: 'ACTIVE' },
+    }
+  );
+  assert.equal(toggleTeacherC1On.status, 200);
+
+  // Register a student strictly inside Center 1, record attendance & payment, verify Center 2 isolation
+  const regCenterStudent = await api(`/center-dashboard/${center1Id}/students`, {
+    method: 'POST',
+    token: owner1Token,
+    body: {
+      fullName: `يوسف حسني الاختباري ${suffix}`,
+      phone: `0112233${suffix.toString().slice(-4)}`,
+      stageId: firstStageId,
+      guardianName: 'حسني محمد',
+      guardianPhone: '01000000001',
+      notes: 'طالب تجريبي لاختبار إدارة الطلاب بالمركز',
+    },
+  });
+  assert.equal(regCenterStudent.status, 201);
+  const ctrStudentUserId: number = regCenterStudent.data.student.studentUserId;
+
+  const searchCenter1Stu = await api(
+    `/center-dashboard/${center1Id}/students?q=${encodeURIComponent(
+      `يوسف حسني الاختباري ${suffix}`
+    )}`,
+    { token: owner1Token }
+  );
+  assert.equal(searchCenter1Stu.status, 200);
+  assert.equal(searchCenter1Stu.data.students.length, 1);
+
+  const c2StudentsList = await api(`/center-dashboard/${center2Id}/students`, {
+    token: owner2Token,
+  });
+  assert.equal(
+    c2StudentsList.data.students.some(
+      (s: { studentUserId: number }) => s.studentUserId === ctrStudentUserId
+    ),
+    false,
+    'Center 2 must not see students registered only in Center 1'
+  );
+  const c2StudentDetailProbe = await api(
+    `/center-dashboard/${center2Id}/students/${ctrStudentUserId}`,
+    { token: owner2Token }
+  );
+  assert.equal(c2StudentDetailProbe.status, 404);
+
+  const recAtt = await api(
+    `/center-dashboard/${center1Id}/students/${ctrStudentUserId}/attendance`,
+    {
+      method: 'POST',
+      token: owner1Token,
+      body: {
+        attendanceDate: '2026-11-26',
+        status: 'PRESENT',
+        notes: 'حضور الحصة الأولى',
+      },
+    }
+  );
+  assert.equal(recAtt.status, 201);
+
+  const recPay = await api(
+    `/center-dashboard/${center1Id}/students/${ctrStudentUserId}/payments`,
+    {
+      method: 'POST',
+      token: owner1Token,
+      body: {
+        amount: 350,
+        currency: 'EGP',
+        status: 'PAID',
+        paymentMethod: 'CASH',
+        paidAt: '2026-11-26',
+        notes: 'رسوم الشهر الأول',
+      },
+    }
+  );
+  assert.equal(recPay.status, 201);
+
+  const stuDetailRes = await api(
+    `/center-dashboard/${center1Id}/students/${ctrStudentUserId}`,
+    { token: owner1Token }
+  );
+  assert.equal(stuDetailRes.status, 200);
+  assert.equal(stuDetailRes.data.attendance.length, 1);
+  assert.equal(stuDetailRes.data.payments.length, 1);
+  assert.equal(Number(stuDetailRes.data.payments[0].amount), 350);
+
+  // Raw binary image upload validation & storage flow
+  const uploadRawImage = async (
+    path: string,
+    token: string,
+    contentType: string,
+    fileName: string,
+    bytes: Uint8Array
+  ) => {
+    const res = await fetch(`${BASE}${path}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': contentType,
+        'X-File-Name': encodeURIComponent(fileName),
+      },
+      body: Buffer.from(bytes),
+    });
+    const text = await res.text();
+    return { status: res.status, data: text ? JSON.parse(text) : null };
+  };
+
+  // 1) Spoofed MIME / invalid magic bytes rejected (400)
+  const spoofedRes = await uploadRawImage(
+    `/center-dashboard/${center1Id}/course-images`,
+    owner1Token,
+    'image/png',
+    'fake.png',
+    new TextEncoder().encode('not-a-real-image-file')
+  );
+  assert.equal(spoofedRes.status, 400);
+
+  // 2) Valid minimal 1x1 PNG + WebP binaries
+  const validPngBytes = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+    'base64'
+  );
+  const validWebpBytes = Buffer.from([
+    0x52, 0x49, 0x46, 0x46, 0x1a, 0x00, 0x00, 0x00,
+    0x57, 0x45, 0x42, 0x50, 0x56, 0x50, 0x38, 0x20,
+    0x0e, 0x00, 0x00, 0x00, 0x30, 0x01, 0x00, 0x9d,
+    0x01, 0x2a, 0x01, 0x00, 0x01, 0x00, 0x00, 0x00,
+  ]);
+
+  const upImgA = await uploadRawImage(
+    `/center-dashboard/${center1Id}/course-images`,
+    owner1Token,
+    'image/png',
+    'physics-cover.png',
+    validPngBytes
+  );
+  assert.equal(upImgA.status, 201);
+  assert.ok(upImgA.data.thumbnailUrl.startsWith('/uploads/courses/'));
+  const imgAUrl: string = upImgA.data.thumbnailUrl;
+
+  // Verify static serving returns 200 + nosniff
+  const serverOrigin = BASE.replace(/\/api$/, '');
+  const imgAFetch = await fetch(`${serverOrigin}${imgAUrl}`);
+  assert.equal(imgAFetch.status, 200);
+  assert.equal(imgAFetch.headers.get('x-content-type-options'), 'nosniff');
+
+  // Create Course A with uploaded cover image (paused enrollment initially to test gating)
+  const createCourseA = await api(`/center-dashboard/${center1Id}/courses`, {
+    method: 'POST',
+    token: owner1Token,
+    body: {
+      instructorUserId: cTeacherUserId,
+      title: `دورة المراجعة المكثفة بالفيزياء ${suffix}`,
+      subtitle: 'شرح شامل وتطبيق عملي مع غلاف مخصص',
+      description: 'دورة تفاعلية تغطي جميع وحدات الفيزياء الحديثة والكلاسيكية.',
+      fieldId: firstFieldId,
+      subjectId: firstSubjectId,
+      stageId: firstStageId,
+      level: 'INTERMEDIATE',
+      price: 250,
+      currency: 'EGP',
+      maxStudents: 25,
+      status: 'PUBLISHED',
+      enrollmentStatus: 'PAUSED',
+      thumbnailUrl: imgAUrl,
+      coverImageKey: upImgA.data.coverImageKey,
+      lessons: [
+        {
+          moduleTitle: 'الوحدة الأولى',
+          title: 'مقدمة التيار الكهربي',
+          content: 'شرح قوانين أوم والدوائر البسيطة.',
+          durationMinutes: 40,
+          isFreePreview: true,
+        },
+      ],
+    },
+  });
+  assert.equal(createCourseA.status, 201);
+  const courseAId: number = createCourseA.data.course.id;
+  assert.equal(createCourseA.data.course.thumbnailUrl, imgAUrl);
+
+  // Create Course B with a separate WebP image to verify image isolation per course
+  const upImgB = await uploadRawImage(
+    `/center-dashboard/${center1Id}/course-images`,
+    owner1Token,
+    'image/webp',
+    'math-cover.webp',
+    validWebpBytes
+  );
+  assert.equal(upImgB.status, 201);
+  const imgBUrl: string = upImgB.data.thumbnailUrl;
+  assert.notEqual(imgAUrl, imgBUrl);
+
+  const createCourseB = await api(`/center-dashboard/${center1Id}/courses`, {
+    method: 'POST',
+    token: owner1Token,
+    body: {
+      instructorUserId: cTeacherUserId,
+      title: `دورة الجبر والهندسة التحليلية ${suffix}`,
+      subtitle: 'دورة ثانية بصورة غلاف مستقلة تماماً',
+      description: 'تأسيس متكامل في الجبر والهندسة التحليلية لطلاب المركز.',
+      fieldId: firstFieldId,
+      level: 'BEGINNER',
+      price: 0,
+      currency: 'EGP',
+      status: 'PUBLISHED',
+      enrollmentStatus: 'OPEN',
+      thumbnailUrl: imgBUrl,
+      coverImageKey: upImgB.data.coverImageKey,
+      lessons: [
+        {
+          moduleTitle: 'الأساسيات',
+          title: 'المعادلات الخطية',
+          content: 'حل المعادلات والمحددات خطوة بخطوة.',
+          durationMinutes: 30,
+          isFreePreview: true,
+        },
+      ],
+    },
+  });
+  assert.equal(createCourseB.status, 201);
+  const courseBId: number = createCourseB.data.course.id;
+
+  // Public courses & detail APIs must reflect exact uploaded images
+  const publicCoursesList = await api('/courses');
+  const pubCourseA = publicCoursesList.data.courses.find(
+    (c: { id: number }) => c.id === courseAId
+  );
+  const pubCourseB = publicCoursesList.data.courses.find(
+    (c: { id: number }) => c.id === courseBId
+  );
+  assert.equal(pubCourseA.thumbnailUrl, imgAUrl);
+  assert.equal(pubCourseB.thumbnailUrl, imgBUrl);
+
+  // Enrollment gating check: PAUSED blocks enrollment (400), OPEN allows & syncs centerStudents
+  const enrollPaused = await api(`/courses/${courseAId}/enroll`, {
+    method: 'POST',
+    token: studentToken,
+  });
+  assert.equal(enrollPaused.status, 400);
+
+  const openCourseA = await api(
+    `/center-dashboard/${center1Id}/courses/${courseAId}`,
+    {
+      method: 'PATCH',
+      token: owner1Token,
+      body: { enrollmentStatus: 'OPEN' },
+    }
+  );
+  assert.equal(openCourseA.status, 200);
+
+  const enrollOpen = await api(`/courses/${courseAId}/enroll`, {
+    method: 'POST',
+    token: studentToken,
+  });
+  assert.equal(enrollOpen.status, 201);
+
+  // Replace Course A image -> old imgAUrl removed from disk (returns 404), Course B untouched
+  const replaceImgA = await uploadRawImage(
+    `/center-dashboard/${center1Id}/course-images?courseId=${courseAId}`,
+    owner1Token,
+    'image/webp',
+    'physics-cover-v2.webp',
+    validWebpBytes
+  );
+  assert.equal(replaceImgA.status, 201);
+  const imgAUrlV2: string = replaceImgA.data.thumbnailUrl;
+  assert.notEqual(imgAUrlV2, imgAUrl);
+
+  const oldImgAFetch = await fetch(`${serverOrigin}${imgAUrl}`);
+  assert.equal(oldImgAFetch.status, 404);
+  const imgBFetchStillAlive = await fetch(`${serverOrigin}${imgBUrl}`);
+  assert.equal(imgBFetchStillAlive.status, 200);
+
+  // Remove Course B image -> thumbnailUrl cleared & file removed
+  const delImgB = await api(
+    `/center-dashboard/${center1Id}/courses/${courseBId}/image`,
+    {
+      method: 'DELETE',
+      token: owner1Token,
+    }
+  );
+  assert.equal(delImgB.status, 200);
+  assert.equal(delImgB.data.course.thumbnailUrl, null);
+  const removedImgBFetch = await fetch(`${serverOrigin}${imgBUrl}`);
+  assert.equal(removedImgBFetch.status, 404);
+
+  // Also clean up Course A's v2 image so test suite leaves no leftover files
+  await api(`/center-dashboard/${center1Id}/courses/${courseAId}/image`, {
+    method: 'DELETE',
+    token: owner1Token,
+  });
+
+  // Settings, Branch, Room, Logo, and Staff Permissions checks
+  const updateSettingsRes = await api(
+    `/center-dashboard/${center1Id}/settings`,
+    {
+      method: 'PATCH',
+      token: owner1Token,
+      body: {
+        address: 'حي العليا — شارع التحلية المحدّث',
+        phone: '+966501122339',
+        bookingPoliciesJson: {
+          allowStudentBookings: true,
+          requireApproval: false,
+          minBookingNoticeHours: 6,
+          allowCancellation: true,
+          minCancellationNoticeHours: 12,
+          maxReschedulesPerBooking: 3,
+          policySummary: 'يمكن الإلغاء قبل 12 ساعة.',
+        },
+      },
+    }
+  );
+  assert.equal(updateSettingsRes.status, 200);
+  assert.equal(
+    updateSettingsRes.data.center.address,
+    'حي العليا — شارع التحلية المحدّث'
+  );
+
+  const addBranchRes = await api(`/center-dashboard/${center1Id}/branches`, {
+    method: 'POST',
+    token: owner1Token,
+    body: {
+      name: `فرع الدمام الاختباري ${suffix}`,
+      city: 'الدمام',
+      address: 'طريق الخليج، الدور الثاني',
+      phone: '+966500001122',
+      isMain: false,
+    },
+  });
+  assert.equal(addBranchRes.status, 201);
+
+  const addRoomRes = await api(`/center-dashboard/${center1Id}/rooms`, {
+    method: 'POST',
+    token: owner1Token,
+    body: {
+      branchId: addBranchRes.data.branch.id,
+      name: 'قاعة الفيزياء الحديثة',
+      roomNumber: 'D-204',
+      capacity: 30,
+      equipmentNotes: 'سبورة ذكية ومختبر بصريات',
+    },
+  });
+  assert.equal(addRoomRes.status, 201);
+
+  // Staff member cannot alter staff permissions (owner-only -> 403)
+  const staffLogin = await api('/auth/demo-login', {
+    method: 'POST',
+    body: { email: 'center.staff@demo.jusoor.edu' },
+  });
+  assert.equal(staffLogin.status, 200);
+  const nonOwnerPermEdit = await api(
+    `/center-dashboard/${center1Id}/staff-permissions/${c1MemberId}`,
+    {
+      method: 'PATCH',
+      token: staffLogin.data.token,
+      body: { permissions: ['MANAGE_COURSES'] },
+    }
+  );
+  assert.equal(nonOwnerPermEdit.status, 403);
+
+  const ownerPermEdit = await api(
+    `/center-dashboard/${center1Id}/staff-permissions/${c1MemberId}`,
+    {
+      method: 'PATCH',
+      token: owner1Token,
+      body: { permissions: ['MANAGE_COURSES', 'VIEW_REPORTS'] },
+    }
+  );
+  assert.equal(ownerPermEdit.status, 200);
+  assert.deepEqual(ownerPermEdit.data.member.permissionsJson, [
+    'MANAGE_COURSES',
+    'VIEW_REPORTS',
+  ]);
+
+  // =========================================================================
+  // 19. CENTER VERIFICATION, FRONT IMAGE, MAPS ADDRESS & PUBLIC PROFILE
+  // =========================================================================
+  // New centers start as PENDING and owners CANNOT self-verify via settings
+  assert.equal(createCenter2.data.center.verificationStatus, 'PENDING');
+  const attemptSelfVerify = await api(
+    `/center-dashboard/${center2Id}/settings`,
+    {
+      method: 'PATCH',
+      token: owner2Token,
+      body: {
+        name: createCenter2.data.center.name,
+        verificationStatus: 'VERIFIED',
+      },
+    }
+  );
+  assert.equal(attemptSelfVerify.status, 200);
+  assert.equal(attemptSelfVerify.data.center.verificationStatus, 'PENDING');
+
+  // Non-admin cannot call admin verify endpoint (403)
+  const nonAdminVerify = await api(`/admin/centers/${center2Id}/verify`, {
+    method: 'PATCH',
+    token: owner2Token,
+    body: { status: 'VERIFIED' },
+  });
+  assert.equal(nonAdminVerify.status, 403);
+
+  // Admin verifies Center 2 -> verificationStatus becomes VERIFIED
+  const adminVerifyCenter2 = await api(`/admin/centers/${center2Id}/verify`, {
+    method: 'PATCH',
+    token: adminToken,
+    body: { status: 'VERIFIED' },
+  });
+  assert.equal(adminVerifyCenter2.status, 200);
+  assert.equal(adminVerifyCenter2.data.center.verificationStatus, 'VERIFIED');
+
+  // Front image upload validation, cross-center isolation, replace & delete
+  const crossFrontUpload = await uploadRawImage(
+    `/center-dashboard/${center1Id}/front-image`,
+    owner2Token,
+    'image/png',
+    'front.png',
+    validPngBytes
+  );
+  assert.equal(crossFrontUpload.status, 403);
+
+  const invalidFrontUpload = await uploadRawImage(
+    `/center-dashboard/${center1Id}/front-image`,
+    owner1Token,
+    'image/png',
+    'fake-front.png',
+    new TextEncoder().encode('invalid-bytes')
+  );
+  assert.equal(invalidFrontUpload.status, 400);
+
+  const upFront1 = await uploadRawImage(
+    `/center-dashboard/${center1Id}/front-image`,
+    owner1Token,
+    'image/png',
+    'center-front.png',
+    validPngBytes
+  );
+  assert.equal(upFront1.status, 201);
+  assert.ok(upFront1.data.frontImageUrl.startsWith('/uploads/centers/'));
+  const frontUrl1: string = upFront1.data.frontImageUrl;
+
+  const front1Check = await fetch(`${serverOrigin}${frontUrl1}`);
+  assert.equal(front1Check.status, 200);
+  assert.equal(front1Check.headers.get('x-content-type-options'), 'nosniff');
+
+  // Replace front image -> old PNG file deleted from disk
+  const upFront2 = await uploadRawImage(
+    `/center-dashboard/${center1Id}/front-image`,
+    owner1Token,
+    'image/webp',
+    'center-front-v2.webp',
+    validWebpBytes
+  );
+  assert.equal(upFront2.status, 201);
+  const frontUrl2: string = upFront2.data.frontImageUrl;
+  assert.notEqual(frontUrl2, frontUrl1);
+
+  const oldFrontCheck = await fetch(`${serverOrigin}${frontUrl1}`);
+  assert.equal(oldFrontCheck.status, 404);
+  const newFrontCheck = await fetch(`${serverOrigin}${frontUrl2}`);
+  assert.equal(newFrontCheck.status, 200);
+
+  // Save structured address + invalid/valid coordinates
+  const badHalfCoords = await api(`/center-dashboard/${center1Id}/settings`, {
+    method: 'PATCH',
+    token: owner1Token,
+    body: { latitude: 30.05 },
+  });
+  assert.equal(badHalfCoords.status, 400);
+
+  const badRangeCoords = await api(`/center-dashboard/${center1Id}/settings`, {
+    method: 'PATCH',
+    token: owner1Token,
+    body: { latitude: 95.5, longitude: 31.2 },
+  });
+  assert.equal(badRangeCoords.status, 400);
+
+  const saveStructuredLoc = await api(`/center-dashboard/${center1Id}/settings`, {
+    method: 'PATCH',
+    token: owner1Token,
+    body: {
+      governorate: 'القاهرة',
+      city: 'مدينة نصر',
+      street: 'شارع عباس العقاد',
+      buildingDetails: 'برج المعرفة - الدور الثالث',
+      address: 'أمام الحديقة الدولية',
+      latitude: 30.059483,
+      longitude: 31.339712,
+    },
+  });
+  assert.equal(saveStructuredLoc.status, 200);
+
+  // Create a DRAFT course in Center 1 to confirm public /centers/:id hides it
+  const draftCenterCourse = await api(`/center-dashboard/${center1Id}/courses`, {
+    method: 'POST',
+    token: owner1Token,
+    body: {
+      instructorUserId: cTeacherUserId,
+      title: `دورة مسودة سرية لا تظهر للعامة ${suffix}`,
+      subtitle: 'مسودة قيد الإعداد',
+      description: 'لا يجب أن تظهر هذه المسودة في صفحة المركز العامة.',
+      fieldId: firstFieldId,
+      level: 'BEGINNER',
+      price: 100,
+      status: 'DRAFT',
+      lessons: [
+        {
+          title: 'درس تجريبي',
+          content: 'محتوى تمهيدي',
+          durationMinutes: 15,
+          isFreePreview: false,
+        },
+      ],
+    },
+  });
+  assert.equal(draftCenterCourse.status, 201);
+  const draftCourseId: number = draftCenterCourse.data.course.id;
+
+  // Public /centers/:id error cases + full verified payload
+  const badCenterIdRes = await api('/centers/abc');
+  assert.equal(badCenterIdRes.status, 400);
+  const missingCenterRes = await api('/centers/9999999');
+  assert.equal(missingCenterRes.status, 404);
+
+  const publicProfile1 = await api(`/centers/${center1Id}`);
+  assert.equal(publicProfile1.status, 200);
+  assert.equal(publicProfile1.data.center.bannerUrl, frontUrl2);
+  assert.equal(publicProfile1.data.center.verificationLabelAr, 'مركز موثوق');
+  assert.equal(
+    publicProfile1.data.center.googleMapsUrl,
+    'https://www.google.com/maps/search/?api=1&query=30.059483,31.339712'
+  );
+  assert.equal(publicProfile1.data.center.bookingPoliciesJson, undefined);
+  assert.equal(publicProfile1.data.center.notificationSettingsJson, undefined);
+
+  // Published courses shown, DRAFT course hidden
+  assert.equal(
+    publicProfile1.data.courses.some((c: { id: number }) => c.id === courseAId),
+    true
+  );
+  assert.equal(
+    publicProfile1.data.courses.some((c: { id: number }) => c.id === draftCourseId),
+    false,
+    'DRAFT courses must NOT appear on public /centers/:id'
+  );
+
+  // Active teacher appears with NO private email
+  const c1PubTeacher = publicProfile1.data.teachers.find(
+    (t: { userId: number }) => t.userId === cTeacherUserId
+  );
+  assert.ok(c1PubTeacher, 'Active center teacher must appear on public center profile');
+  assert.equal(c1PubTeacher.email, undefined);
+  assert.ok(c1PubTeacher.centerCoursesCount >= 2);
+
+  // Clear coords -> Maps URL falls back to encoded address cleanly
+  const clearCoordsRes = await api(`/center-dashboard/${center1Id}/settings`, {
+    method: 'PATCH',
+    token: owner1Token,
+    body: { latitude: null, longitude: null },
+  });
+  assert.equal(clearCoordsRes.status, 200);
+
+  const profileAddressFallback = await api(`/centers/${center1Id}`);
+  assert.equal(profileAddressFallback.status, 200);
+  assert.ok(
+    profileAddressFallback.data.center.googleMapsUrl.startsWith(
+      'https://www.google.com/maps/search/?api=1&query='
+    )
+  );
+  assert.equal(
+    profileAddressFallback.data.center.googleMapsUrl.includes('30.059483'),
+    false
+  );
+
+  // Remove front image via DELETE endpoint -> clears bannerUrl & deletes file on disk
+  const delFrontRes = await api(`/center-dashboard/${center1Id}/front-image`, {
+    method: 'DELETE',
+    token: owner1Token,
+  });
+  assert.equal(delFrontRes.status, 200);
+  assert.equal(delFrontRes.data.bannerUrl, null);
+  const deletedFrontCheck = await fetch(`${serverOrigin}${frontUrl2}`);
+  assert.equal(deletedFrontCheck.status, 404);
+
+  // =========================================================================
+  // 20. ENHANCED PROVIDER COURSE CREATION, COVER UPLOAD, MANUAL FIELD & LESSONS
+  // =========================================================================
+  const mentorLogin = await api('/auth/demo-login', {
+    method: 'POST',
+    body: { email: 'layla.mentor@demo.jusoor.edu' },
+  });
+  assert.equal(mentorLogin.status, 200);
+  const mentorToken: string = mentorLogin.data.token;
+
+  const expertLogin = await api('/auth/demo-login', {
+    method: 'POST',
+    body: { email: 'omar.expert@demo.jusoor.edu' },
+  });
+  assert.equal(expertLogin.status, 200);
+  const expertToken: string = expertLogin.data.token;
+
+  // 1) Student cannot create courses or upload course cover images (403)
+  const studentCourseRes = await api('/courses', {
+    method: 'POST',
+    token: studentToken,
+    body: {
+      title: 'محاولة إنشاء دورة من طالب',
+      description: 'لا يجب السماح للطلاب بإنشاء دورات تدريبية.',
+      customFieldName: 'البرمجة',
+      status: 'DRAFT',
+      lessons: [],
+    },
+  });
+  assert.equal(studentCourseRes.status, 403);
+
+  const studentCoverRes = await uploadRawImage(
+    '/courses/cover-image',
+    studentToken,
+    'image/png',
+    'student-cover.png',
+    validPngBytes
+  );
+  assert.equal(studentCoverRes.status, 403);
+
+  // 2) Provider cover image upload rejects fake bytes, accepts valid PNG, serves with nosniff
+  const invalidCoverRes = await uploadRawImage(
+    '/courses/cover-image',
+    mentorToken,
+    'image/png',
+    'fake.png',
+    new TextEncoder().encode('not-an-image')
+  );
+  assert.equal(invalidCoverRes.status, 400);
+
+  const uploadCover1 = await uploadRawImage(
+    '/courses/cover-image',
+    mentorToken,
+    'image/png',
+    'cyber-cover.png',
+    validPngBytes
+  );
+  assert.equal(uploadCover1.status, 201);
+  assert.ok(uploadCover1.data.thumbnailUrl.startsWith('/uploads/courses/'));
+  const coverUrl1: string = uploadCover1.data.thumbnailUrl;
+
+  const serveCover1 = await fetch(`${serverOrigin}${coverUrl1}`);
+  assert.equal(serveCover1.status, 200);
+  assert.equal(serveCover1.headers.get('x-content-type-options'), 'nosniff');
+
+  // 3) Reject publishing without lessons or missing manual field
+  const noFieldCourse = await api('/courses', {
+    method: 'POST',
+    token: mentorToken,
+    body: {
+      title: 'دورة بدون مجال محدد',
+      description: 'وصف تفصيلي كافٍ لاختبار التحقق من المجال اليدوي.',
+      customFieldName: '   ',
+      status: 'DRAFT',
+      lessons: [],
+    },
+  });
+  assert.equal(noFieldCourse.status, 400);
+
+  const publishNoLessons = await api('/courses', {
+    method: 'POST',
+    token: mentorToken,
+    body: {
+      title: 'دورة نشر بدون دروس',
+      description: 'يجب رفض نشر هذه الدورة لعدم وجود أي درس.',
+      customFieldName: 'الأمن السيبراني',
+      status: 'PUBLISHED',
+      lessons: [],
+    },
+  });
+  assert.equal(publishNoLessons.status, 400);
+
+  // 4) Mentor creates DRAFT course with manual Arabic custom field outside taxonomy + 2 lessons
+  const mentorDraftRes = await api('/courses', {
+    method: 'POST',
+    token: mentorToken,
+    body: {
+      title: `الأمن السيبراني التطبيقي ${suffix}`,
+      description:
+        'دورة عملية متكاملة تغطي أساسيات حماية الأنظمة واختبار الاختراق الأخلاقي.',
+      customFieldName: 'الأمن السيبراني',
+      targetAudience: 'طلاب الجامعات والمطورون المبتدئون',
+      level: 'INTERMEDIATE',
+      price: 450,
+      currency: 'EGP',
+      maxStudents: 40,
+      thumbnailUrl: coverUrl1,
+      coverImageKey: uploadCover1.data.coverImageKey,
+      status: 'DRAFT',
+      lessons: [
+        {
+          title: 'مقدمة في أمن المعلومات',
+          content: 'نظرة شاملة على مفاهيم السرية والسلامة والتوافر.\n- أمثلة عملية',
+          durationMinutes: 25,
+          isFreePreview: true,
+        },
+        {
+          title: 'تأمين الشبكات المحلية',
+          content: 'فهم الجدران النارية وتجزئة الشبكات والحماية من التطفل.',
+          durationMinutes: 35,
+          isFreePreview: false,
+        },
+      ],
+    },
+  });
+  assert.equal(mentorDraftRes.status, 201);
+  const mentorCourseId: number = mentorDraftRes.data.course.id;
+  assert.equal(mentorDraftRes.data.course.customFieldName, 'الأمن السيبراني');
+  assert.equal(mentorDraftRes.data.course.fieldNameAr, 'الأمن السيبراني');
+  assert.equal(mentorDraftRes.data.lessons.length, 2);
+
+  // DRAFT course is hidden from student GET /courses/:id -> 403 & public /courses
+  const studentViewDraft = await api(`/courses/${mentorCourseId}`, {
+    token: studentToken,
+  });
+  assert.equal(studentViewDraft.status, 403);
+
+  const publicBeforePublish = await api('/courses');
+  assert.equal(
+    publicBeforePublish.data.courses.some(
+      (c: { id: number }) => c.id === mentorCourseId
+    ),
+    false
+  );
+
+  // Mentor sees their draft course in GET /dashboard providerCourses & GET /courses?mine=true
+  const mentorDash = await api('/dashboard', { token: mentorToken });
+  assert.equal(mentorDash.status, 200);
+  const dashCourse = mentorDash.data.providerCourses.find(
+    (c: { id: number }) => c.id === mentorCourseId
+  );
+  assert.ok(dashCourse);
+  assert.equal(dashCourse.fieldNameAr, 'الأمن السيبراني');
+  assert.equal(dashCourse.lessons.length, 2);
+
+  // 5) Add 3rd lesson, reorder lessons, edit 1st lesson, and confirm cross-teacher isolation
+  const teacherStealLesson = await api(
+    `/courses/${mentorCourseId}/lessons`,
+    {
+      method: 'POST',
+      token: teacherToken,
+      body: {
+        title: 'محاولة غير مصرح بها',
+        content: 'محتوى غير مصرح بتعديله من حساب آخر.',
+        durationMinutes: 20,
+      },
+    }
+  );
+  assert.equal(teacherStealLesson.status, 403);
+
+  const addLesson3 = await api(`/courses/${mentorCourseId}/lessons`, {
+    method: 'POST',
+    token: mentorToken,
+    body: {
+      title: 'الدرس الثالث المضاف',
+      content: 'تطبيق عملي على تحليل الحزم واكتشاف الثغرات.',
+      durationMinutes: 40,
+      isFreePreview: false,
+    },
+  });
+  assert.equal(addLesson3.status, 201);
+  assert.equal(addLesson3.data.lessons.length, 3);
+  const l1Id = addLesson3.data.lessons[0].id;
+  const l2Id = addLesson3.data.lessons[1].id;
+  const l3Id = addLesson3.data.lessons[2].id;
+
+  const reorderRes = await api(`/courses/${mentorCourseId}/lessons/reorder`, {
+    method: 'PATCH',
+    token: mentorToken,
+    body: { lessonIds: [l3Id, l1Id, l2Id] },
+  });
+  assert.equal(reorderRes.status, 200);
+  assert.deepEqual(
+    reorderRes.data.lessons.map((l: { id: number; sortOrder: number }) => [
+      l.id,
+      l.sortOrder,
+    ]),
+    [
+      [l3Id, 1],
+      [l1Id, 2],
+      [l2Id, 3],
+    ]
+  );
+
+  // Edit lesson & publish course + replace cover image (old PNG deleted from disk)
+  const uploadCover2 = await uploadRawImage(
+    `/courses/cover-image?courseId=${mentorCourseId}`,
+    mentorToken,
+    'image/webp',
+    'cyber-cover-v2.webp',
+    validWebpBytes
+  );
+  assert.equal(uploadCover2.status, 201);
+  const coverUrl2: string = uploadCover2.data.thumbnailUrl;
+  assert.notEqual(coverUrl2, coverUrl1);
+  assert.equal((await fetch(`${serverOrigin}${coverUrl1}`)).status, 404);
+  assert.equal((await fetch(`${serverOrigin}${coverUrl2}`)).status, 200);
+
+  const publishMentorCourse = await api(`/courses/${mentorCourseId}`, {
+    method: 'PATCH',
+    token: mentorToken,
+    body: {
+      status: 'PUBLISHED',
+      title: `الأمن السيبراني التطبيقي الشامل ${suffix}`,
+    },
+  });
+  assert.equal(publishMentorCourse.status, 200);
+  assert.equal(publishMentorCourse.data.course.status, 'PUBLISHED');
+  assert.equal(
+    publishMentorCourse.data.course.fieldNameAr,
+    'الأمن السيبراني',
+    'Manual field must NEVER be overwritten on update/publish'
+  );
+
+  // Delete 2nd lesson -> remaining lessons renumbered 1..2
+  const deleteLessonRes = await api(
+    `/courses/${mentorCourseId}/lessons/${l2Id}`,
+    {
+      method: 'DELETE',
+      token: mentorToken,
+    }
+  );
+  assert.equal(deleteLessonRes.status, 200);
+  assert.deepEqual(
+    deleteLessonRes.data.lessons.map((l: { id: number; sortOrder: number }) => [
+      l.id,
+      l.sortOrder,
+    ]),
+    [
+      [l3Id, 1],
+      [l1Id, 2],
+    ]
+  );
+
+  // Public GET /courses & GET /courses/:id show custom field, targetAudience, cover & ordered lessons
+  const publicAfterPublish = await api('/courses?field=%D8%A7%D9%84%D8%A3%D9%85%D9%86');
+  assert.equal(
+    publicAfterPublish.data.courses.some(
+      (c: { id: number; fieldNameAr: string; thumbnailUrl: string }) =>
+        c.id === mentorCourseId &&
+        c.fieldNameAr === 'الأمن السيبراني' &&
+        c.thumbnailUrl === coverUrl2
+    ),
+    true
+  );
+
+  const studentViewPublished = await api(`/courses/${mentorCourseId}`, {
+    token: studentToken,
+  });
+  assert.equal(studentViewPublished.status, 200);
+  assert.equal(studentViewPublished.data.course.fieldNameAr, 'الأمن السيبراني');
+  assert.equal(
+    studentViewPublished.data.course.targetAudience,
+    'طلاب الجامعات والمطورون المبتدئون'
+  );
+  assert.equal(studentViewPublished.data.lessons.length, 2);
+  // First lesson (l3Id) is not free preview -> locked for non-enrolled student; second (l1Id) is free preview -> unlocked
+  assert.equal(studentViewPublished.data.lessons[0].unlocked, false);
+  assert.equal(studentViewPublished.data.lessons[1].unlocked, true);
+
+  // 6) Expert creates course with English manual field + Teacher creates course
+  const expertCourseRes = await api('/courses', {
+    method: 'POST',
+    token: expertToken,
+    body: {
+      title: `Enterprise Architecture Systems ${suffix}`,
+      description:
+        'Comprehensive software architecture workshop for scalable cloud services.',
+      customFieldName: 'AI & Systems Design',
+      price: 0,
+      currency: 'EGP',
+      status: 'PUBLISHED',
+      lessons: [
+        {
+          title: 'Domain Boundaries & Scalability',
+          content: 'Designing modular bounded contexts for distributed platforms.',
+          durationMinutes: 30,
+          isFreePreview: true,
+        },
+      ],
+    },
+  });
+  assert.equal(expertCourseRes.status, 201);
+  assert.equal(
+    expertCourseRes.data.course.fieldNameAr,
+    'AI & Systems Design'
+  );
+
+  const teacherCourseRes = await api('/courses', {
+    method: 'POST',
+    token: teacherToken,
+    body: {
+      title: `الفيزياء العملية للثانوية ${suffix}`,
+      description: 'دورة تفاعلية لحل مسائل التيار الكهربي والدوائر الحديثة.',
+      customFieldName: 'الفيزياء التطبيقية',
+      price: 200,
+      currency: 'EGP',
+      status: 'PUBLISHED',
+      lessons: [
+        {
+          title: 'قانون أوم للدوائر المغلقة',
+          content: 'شرح خطوات التحليل وحل المسائل المتدرجة.',
+          durationMinutes: 30,
+          isFreePreview: true,
+        },
+      ],
+    },
+  });
+  assert.equal(teacherCourseRes.status, 201);
+  assert.equal(teacherCourseRes.data.course.fieldNameAr, 'الفيزياء التطبيقية');
+
+  // Remove uploaded cover image from mentor course -> clears DB & deletes WebP from disk
+  const delCoverRes = await api(`/courses/${mentorCourseId}/cover-image`, {
+    method: 'DELETE',
+    token: mentorToken,
+  });
+  assert.equal(delCoverRes.status, 200);
+  assert.equal(delCoverRes.data.course.thumbnailUrl, null);
+  assert.equal((await fetch(`${serverOrigin}${coverUrl2}`)).status, 404);
 });
+
+
+
 
 
 

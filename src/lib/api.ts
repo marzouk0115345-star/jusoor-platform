@@ -108,6 +108,19 @@ export {
   formatCurrencyPrice,
   formatOfflineAddress,
   isOfflineDeliveryMode,
+  CENTER_VERIFICATION_LABELS_AR,
+  getCenterVerificationLabelAr,
+  formatCenterFullAddress,
+  buildGoogleMapsSearchUrl,
+  parseCoordinatesFromMapsInput,
+  validateCoordinates,
+  resolveCourseFieldDisplay,
+  validateManualCourseField,
+  formatArabicLessonOrdinal,
+  normalizeCourseLessonsOrder,
+  reorderCourseLessons,
+  validateCourseLessonInput,
+  validateCoursePublishReadiness,
   type IndividualSlotStatus,
 } from './domain';
 
@@ -511,5 +524,607 @@ export function formatSessionDateRange(
   });
   return `${dateStr} · ${startTimeStr} - ${endTimeStr}`;
 }
+
+export function uploadCenterImageWithProgress(
+  url: string,
+  file: File,
+  onProgress?: (percent: number) => void
+): Promise<{
+  thumbnailUrl?: string;
+  coverImageKey?: string;
+  logoUrl?: string;
+  frontImageUrl?: string;
+  bannerUrl?: string;
+  mimeType?: string;
+  sizeBytes?: number;
+}> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', url, true);
+    if (inMemoryToken) {
+      xhr.setRequestHeader('Authorization', `Bearer ${inMemoryToken}`);
+    }
+    xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
+    xhr.setRequestHeader('X-File-Name', encodeURIComponent(file.name));
+
+    xhr.upload.onprogress = (ev) => {
+      if (ev.lengthComputable && onProgress) {
+        const pct = Math.min(99, Math.round((ev.loaded / ev.total) * 100));
+        onProgress(pct);
+      }
+    };
+
+    xhr.onload = () => {
+      let data: Record<string, unknown> = {};
+      try {
+        data = xhr.responseText
+          ? (JSON.parse(xhr.responseText) as Record<string, unknown>)
+          : {};
+      } catch {
+        data = {};
+      }
+      if (xhr.status >= 200 && xhr.status < 300) {
+        if (onProgress) onProgress(100);
+        resolve(
+          data as {
+            thumbnailUrl?: string;
+            coverImageKey?: string;
+            logoUrl?: string;
+            frontImageUrl?: string;
+            bannerUrl?: string;
+            mimeType?: string;
+            sizeBytes?: number;
+          }
+        );
+      } else {
+        reject(
+          new Error(
+            (typeof data.error === 'string' && data.error) ||
+              `تعذر رفع الصورة (رمز ${xhr.status}).`
+          )
+        );
+      }
+    };
+
+    xhr.onerror = () => {
+      reject(new Error('حدث خطأ في الشبكة أثناء رفع الصورة.'));
+    };
+
+    xhr.send(file);
+  });
+}
+
+export const EMPLOYMENT_TYPE_LABELS_AR: Record<string, string> = {
+  FULL_TIME: 'دوام كامل',
+  PART_TIME: 'دوام جزئي',
+  CONTRACT: 'تعاقد فصلي',
+  FREELANCE: 'مستقل / بالساعة',
+};
+
+export const COURSE_STATUS_LABELS_AR: Record<string, string> = {
+  DRAFT: 'مسودة',
+  PUBLISHED: 'منشورة',
+  PAUSED: 'متوقفة مؤقتاً',
+  CLOSED: 'مغلقة',
+  ARCHIVED: 'مؤرشفة',
+};
+
+export const COURSE_ENROLLMENT_STATUS_LABELS_AR: Record<string, string> = {
+  OPEN: 'مفتوح للتسجيل',
+  PAUSED: 'التسجيل متوقف مؤقتاً',
+  CLOSED: 'التسجيل مغلق',
+};
+
+export const ATTENDANCE_STATUS_LABELS_AR: Record<string, string> = {
+  PRESENT: 'حاضر',
+  ABSENT: 'غائب',
+  LATE: 'متأخر',
+  EXCUSED: 'غياب بعذر',
+};
+
+export const PAYMENT_STATUS_LABELS_AR: Record<string, string> = {
+  PAID: 'مدفوعة',
+  PENDING: 'معلّقة',
+  PARTIAL: 'مدفوعة جزئياً',
+  OVERDUE: 'متأخرة',
+  REFUNDED: 'مستردة',
+};
+
+export const PAYMENT_METHOD_LABELS_AR: Record<string, string> = {
+  CASH: 'نقدي بالمركز',
+  CARD: 'بطاقة بنكية',
+  TRANSFER: 'تحويل بنكي',
+  WALLET: 'محفظة إلكترونية',
+};
+
+export interface CenterWorkingHourItem {
+  dayOfWeek: number;
+  isOpen: boolean;
+  openTime: string;
+  closeTime: string;
+  note?: string;
+}
+
+export interface CenterBookingPolicies {
+  allowStudentBookings: boolean;
+  requireApproval: boolean;
+  minBookingNoticeHours: number;
+  allowCancellation: boolean;
+  minCancellationNoticeHours: number;
+  maxReschedulesPerBooking: number;
+  policySummary: string;
+}
+
+export interface CenterNotificationSettings {
+  notifyNewStudentRegistration: boolean;
+  notifyNewCourseEnrollment: boolean;
+  notifyBookingRequests: boolean;
+  notifyCancellations: boolean;
+  notifyPaymentUpdates: boolean;
+  notifyStaffActivities: boolean;
+}
+
+export interface CenterDashboardCenterItem {
+  id: number;
+  ownerUserId: number;
+  name: string;
+  slug: string;
+  description: string;
+  governorate?: string | null;
+  city: string;
+  country: string;
+  street?: string | null;
+  buildingDetails?: string | null;
+  address: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  phone: string | null;
+  secondaryPhone: string | null;
+  website: string | null;
+  logoUrl: string | null;
+  bannerUrl: string | null;
+  verificationStatus: string;
+  workingHoursJson: CenterWorkingHourItem[];
+  bookingPoliciesJson: CenterBookingPolicies;
+  notificationSettingsJson: CenterNotificationSettings;
+  callerRole?: string;
+  callerPermissions?: string[];
+  isOwner?: boolean;
+}
+
+export interface CenterOverviewResponse {
+  center: CenterDashboardCenterItem;
+  isOwner: boolean;
+  stats: {
+    activeTeachersCount: number;
+    inactiveTeachersCount: number;
+    totalStaffCount: number;
+    studentsCount: number;
+    coursesCount: number;
+    publishedCoursesCount: number;
+    totalEnrollments: number;
+    branchesCount: number;
+    activeBranchesCount: number;
+    roomsCount: number;
+    activeRoomsCount: number;
+    attendanceRate: number;
+    totalCollectedPayments: number;
+  };
+  recentEnrollments: Array<{
+    id: number;
+    courseId: number;
+    studentUserId: number;
+    status: string;
+    enrolledAt: string;
+    studentName: string;
+    courseTitle: string;
+  }>;
+  recentCourses: Array<{
+    id: number;
+    title: string;
+    status: string;
+    enrollmentStatus: string;
+    price: string;
+    thumbnailUrl: string | null;
+    instructorName: string;
+    createdAt: string;
+  }>;
+  branches: CenterBranchItem[];
+  teachersPreview: Array<{
+    id: number;
+    userId: number;
+    memberRole: string;
+    status: string;
+    fullName: string;
+    jobTitle: string;
+  }>;
+}
+
+export interface CenterTeacherAssignmentItem {
+  id: number;
+  memberId: number;
+  teacherUserId: number;
+  subjectId: number;
+  subjectNameAr: string;
+  stageId: number;
+  stageNameAr: string;
+  systemId: number | null;
+  systemNameAr: string | null;
+  gradeId: number | null;
+  gradeNameAr: string | null;
+  divisionId: number | null;
+  divisionNameAr: string | null;
+  pathwayId: number | null;
+  pathwayNameAr: string | null;
+  notes: string | null;
+  isActive: boolean;
+}
+
+export interface CenterTeacherItem {
+  id: number;
+  centerId: number;
+  userId: number;
+  memberRole: string;
+  jobTitle: string;
+  employmentType: 'FULL_TIME' | 'PART_TIME' | 'CONTRACT' | 'FREELANCE';
+  permissionsJson: string[];
+  status: 'ACTIVE' | 'INACTIVE';
+  notes: string | null;
+  joinedAt: string;
+  fullName: string;
+  email: string;
+  phone: string | null;
+  accountStatus: string;
+  headline: string | null;
+  yearsExperience: number | null;
+  ratingAvg: string | null;
+  coursesCount: number;
+  studentsCount: number;
+  courses: Array<{
+    id: number;
+    title: string;
+    instructorUserId: number;
+    status: string;
+  }>;
+  assignments: CenterTeacherAssignmentItem[];
+}
+
+export interface CenterStudentListItem {
+  centerStudentId: number | null;
+  studentUserId: number;
+  fullName: string;
+  email: string;
+  phone: string;
+  stageId: number | null;
+  stageNameAr: string | null;
+  gradeId: number | null;
+  gradeNameAr: string | null;
+  guardianName: string | null;
+  guardianPhone: string | null;
+  notes: string | null;
+  status: 'ACTIVE' | 'INACTIVE';
+  joinedAt: string;
+  enrolledCourses: Array<{
+    enrollmentId: number;
+    courseId: number;
+    courseTitle: string;
+    status: string;
+    completionPercent: number;
+  }>;
+  assignedTeachers: Array<{ id: number; fullName: string }>;
+  attendanceSummary: {
+    present: number;
+    absent: number;
+    late: number;
+    excused: number;
+    total: number;
+  };
+  paymentsSummary: {
+    totalPaid: number;
+    totalPending: number;
+    recordsCount: number;
+    lastStatus: string | null;
+  };
+}
+
+export interface CenterStudentDetailResponse {
+  student: {
+    studentUserId: number;
+    fullName: string;
+    email: string;
+    phone: string;
+    stageId: number | null;
+    stageNameAr: string | null;
+    gradeId: number | null;
+    gradeNameAr: string | null;
+    guardianName: string | null;
+    guardianPhone: string | null;
+    notes: string | null;
+    status: string;
+    joinedAt: string;
+  };
+  enrollments: Array<{
+    enrollmentId: number;
+    courseId: number;
+    status: string;
+    enrolledAt: string;
+    completedAt: string | null;
+    completionPercent: number | null;
+    completedLessonsCount: number | null;
+    totalLessonsCount: number | null;
+    courseTitle: string;
+    instructorName: string;
+  }>;
+  attendance: Array<{
+    id: number;
+    courseId: number | null;
+    courseTitle: string | null;
+    attendanceDate: string;
+    status: string;
+    notes: string | null;
+    createdAt: string;
+  }>;
+  payments: Array<{
+    id: number;
+    courseId: number | null;
+    courseTitle: string | null;
+    amount: string;
+    currency: string;
+    status: string;
+    paymentMethod: string;
+    referenceCode: string | null;
+    notes: string | null;
+    paidAt: string;
+    createdAt: string;
+  }>;
+  platformPayments: Array<{
+    id: number;
+    entityId: number;
+    amount: string;
+    currency: string;
+    status: string;
+    paymentReference: string;
+    createdAt: string;
+  }>;
+}
+
+export interface ProviderCourseLessonItem {
+  id?: number;
+  moduleTitle?: string | null;
+  title: string;
+  content: string;
+  durationMinutes: number;
+  sortOrder?: number;
+  isFreePreview: boolean;
+}
+
+export interface ProviderCourseItem {
+  id: number;
+  title: string;
+  slug: string;
+  subtitle: string;
+  description: string;
+  customFieldName?: string | null;
+  fieldNameAr: string;
+  targetAudience?: string | null;
+  fieldId: number;
+  subjectId: number | null;
+  subjectNameAr?: string | null;
+  stageId: number | null;
+  stageNameAr?: string | null;
+  systemId: number | null;
+  gradeId: number | null;
+  gradeNameAr?: string | null;
+  divisionId: number | null;
+  pathwayId: number | null;
+  level: 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED';
+  language: string;
+  price: string;
+  currency: string;
+  maxStudents: number | null;
+  enrollmentStatus: 'OPEN' | 'PAUSED' | 'CLOSED';
+  thumbnailUrl: string | null;
+  coverImageKey: string | null;
+  status: 'DRAFT' | 'PUBLISHED' | 'PAUSED' | 'CLOSED' | 'ARCHIVED';
+  centerId?: number | null;
+  instructorId?: number;
+  instructorName?: string;
+  createdAt: string;
+  updatedAt: string;
+  lessons: ProviderCourseLessonItem[];
+  lessonsCount: number;
+  totalMinutes?: number;
+  enrollmentsCount: number;
+}
+
+export interface CenterCourseLessonInput {
+  id?: number;
+  moduleTitle?: string | null;
+  title: string;
+  content: string;
+  durationMinutes: number;
+  sortOrder?: number;
+  isFreePreview: boolean;
+}
+
+export interface CenterCourseItem {
+  id: number;
+  title: string;
+  slug: string;
+  subtitle: string;
+  description: string;
+  instructorUserId: number;
+  instructorName: string;
+  fieldId: number;
+  customFieldName?: string | null;
+  fieldNameAr: string;
+  targetAudience?: string | null;
+  subjectId: number | null;
+  subjectNameAr: string | null;
+  stageId: number | null;
+  stageNameAr: string | null;
+  systemId: number | null;
+  gradeId: number | null;
+  gradeNameAr: string | null;
+  divisionId: number | null;
+  pathwayId: number | null;
+  level: 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED';
+  language: string;
+  price: string;
+  currency: string;
+  maxStudents: number | null;
+  enrollmentStatus: 'OPEN' | 'PAUSED' | 'CLOSED';
+  thumbnailUrl: string | null;
+  coverImageKey: string | null;
+  status: 'DRAFT' | 'PUBLISHED' | 'PAUSED' | 'CLOSED' | 'ARCHIVED';
+  createdAt: string;
+  updatedAt: string;
+  lessons: CenterCourseLessonInput[];
+  lessonsCount: number;
+  enrollmentsCount: number;
+  ratingAvg: number | null;
+  reviewsCount: number;
+  reviews: Array<{
+    id: number;
+    rating: number;
+    comment: string;
+    authorName: string;
+    createdAt: string;
+  }>;
+}
+
+export interface CenterBranchItem {
+  id: number;
+  centerId: number;
+  name: string;
+  city: string;
+  address: string;
+  phone: string | null;
+  isMain: boolean;
+  isActive: boolean;
+}
+
+export interface CenterRoomItem {
+  id: number;
+  centerId: number;
+  branchId: number;
+  branchName: string;
+  name: string;
+  roomNumber: string;
+  capacity: number;
+  equipmentNotes: string | null;
+  isActive: boolean;
+}
+
+export interface CenterSettingsResponse {
+  center: CenterDashboardCenterItem;
+  isOwner: boolean;
+  branches: CenterBranchItem[];
+  rooms: CenterRoomItem[];
+  staff: Array<{
+    id: number;
+    userId: number;
+    fullName: string;
+    email: string;
+    memberRole: string;
+    jobTitle: string;
+    status: string;
+    permissionsJson: string[];
+  }>;
+}
+
+export interface PublicCenterTeacherItem {
+  memberId: number;
+  userId: number;
+  fullName: string;
+  avatarUrl: string | null;
+  memberRole: string;
+  jobTitle: string;
+  headline: string;
+  bio: string;
+  yearsExperience: number | null;
+  verificationStatus: string;
+  ratingAvg: number;
+  reviewsCount: number;
+  centerCoursesCount: number;
+  subjects: Array<{ id: number; nameAr: string }>;
+  stages: Array<{ id: number; nameAr: string }>;
+  grades: Array<{ id: number; nameAr: string }>;
+}
+
+export interface PublicCenterCourseItem {
+  id: number;
+  title: string;
+  subtitle: string;
+  level: string;
+  price: string;
+  currency: string;
+  thumbnailUrl: string | null;
+  instructorId: number;
+  instructorName: string;
+  instructorAvatarUrl: string | null;
+  fieldNameAr: string;
+  subjectNameAr: string | null;
+  stageNameAr: string | null;
+  gradeNameAr: string | null;
+  divisionNameAr: string | null;
+  pathwayNameAr: string | null;
+  centerName: string;
+  lessonsCount: number;
+  enrollmentsCount: number;
+  maxStudents: number | null;
+  enrollmentStatus: string;
+  isEnrollmentAvailable: boolean;
+  ratingAvg: number | null;
+  reviewsCount: number;
+}
+
+export interface PublicCenterProfileResponse {
+  center: {
+    id: number;
+    name: string;
+    slug: string;
+    description: string;
+    governorate: string | null;
+    city: string;
+    country: string;
+    street: string | null;
+    buildingDetails: string | null;
+    address: string | null;
+    fullAddress: string;
+    googleMapsUrl: string | null;
+    latitude: number | null;
+    longitude: number | null;
+    phone: string | null;
+    secondaryPhone: string | null;
+    website: string | null;
+    bannerUrl: string | null;
+    logoUrl: string | null;
+    verificationStatus: string;
+    verificationLabelAr: string;
+    workingHoursJson: CenterWorkingHourItem[];
+    createdAt: string;
+    canManage: boolean;
+    stats: {
+      teachersCount: number;
+      activeMembersCount: number;
+      coursesCount: number;
+      totalEnrollments: number;
+      branchesCount: number;
+    };
+  };
+  branches: Array<{
+    id: number;
+    name: string;
+    city: string;
+    address: string;
+    phone: string | null;
+    isMain: boolean;
+  }>;
+  teachers: PublicCenterTeacherItem[];
+  courses: PublicCenterCourseItem[];
+}
+
+
 
 

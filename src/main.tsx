@@ -1,4 +1,5 @@
-import {createRoot} from 'react-dom/client';
+import { createRoot } from 'react-dom/client';
+import 'bootstrap-icons/font/bootstrap-icons.css';
 import App from './App.tsx';
 import './index.css';
 
